@@ -1,6 +1,7 @@
 python-manilaclient (1.4.0-1) experimental; urgency=medium
 
   * New upstream release.
+  * Fixed (build-)depends for this release.
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 23 Sep 2015 18:44:07 +0200
 
