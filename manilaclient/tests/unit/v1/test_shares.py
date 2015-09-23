@@ -110,6 +110,8 @@ class SharesTest(utils.TestCase):
             'share_network_id': None,
             'share_type': None,
             'is_public': False,
+            'availability_zone': None,
+            'consistency_group_id': None,
         }
         cs.shares.create(protocol, 1)
         cs.assert_called('POST', '/shares', {'share': expected})
@@ -129,6 +131,8 @@ class SharesTest(utils.TestCase):
             'share_network_id': 'fake_nw',
             'share_type': None,
             'is_public': False,
+            'availability_zone': None,
+            'consistency_group_id': None,
         }
         cs.shares.create('nfs', 1, share_network=share_network)
         cs.assert_called('POST', '/shares', {'share': expected})
@@ -148,12 +152,19 @@ class SharesTest(utils.TestCase):
             'share_network_id': None,
             'share_type': 'fake_st',
             'is_public': False,
+            'availability_zone': None,
+            'consistency_group_id': None,
         }
         cs.shares.create('nfs', 1, share_type=share_type)
         cs.assert_called('POST', '/shares', {'share': expected})
 
-    @ddt.data(True, False)
-    def test_create_share_with_all_params_defined(self, is_public):
+    @ddt.data({'is_public': True,
+               'availability_zone': 'nova'},
+              {'is_public': False,
+               'availability_zone': 'fake_azzzzz'})
+    @ddt.unpack
+    def test_create_share_with_all_params_defined(self, is_public,
+                                                  availability_zone):
         body = {
             'share': {
                 'is_public': is_public,
@@ -165,9 +176,12 @@ class SharesTest(utils.TestCase):
                 'share_proto': 'nfs',
                 'share_network_id': None,
                 'size': 1,
+                'availability_zone': availability_zone,
+                'consistency_group_id': None,
             }
         }
-        cs.shares.create('nfs', 1, is_public=is_public)
+        cs.shares.create('nfs', 1, is_public=is_public,
+                         availability_zone=availability_zone)
         cs.assert_called('POST', '/shares', body)
 
     @ddt.data(
@@ -323,3 +337,23 @@ class SharesTest(utils.TestCase):
         expected_body = {'os-extend': {'new_size': size}}
         cs.shares.extend(share, size)
         cs.assert_called('POST', '/shares/1234/action', expected_body)
+
+    @ddt.data(
+        type('ShareUUID', (object, ), {'uuid': '1234'}),
+        type('ShareID', (object, ), {'id': '1234'}),
+        '1234')
+    def test_shrink_share(self, share):
+        size = 123
+        expected_body = {'os-shrink': {'new_size': size}}
+        cs.shares.shrink(share, size)
+        cs.assert_called('POST', '/shares/1234/action', expected_body)
+
+    def test_list_share_instances(self):
+        share = type('ShareID', (object, ), {'id': '1234'})
+        cs.shares.list_instances(share)
+        cs.assert_called('GET', '/shares/1234/instances')
+
+    def test_migrate_share(self):
+        host = 'fake_host'
+        self.share.migrate_share(host, True)
+        self.assertTrue(self.share.manager.migrate_share.called)

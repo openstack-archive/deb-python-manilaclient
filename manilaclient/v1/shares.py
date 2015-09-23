@@ -25,6 +25,7 @@ from manilaclient import base
 from manilaclient.common import constants
 from manilaclient import exceptions
 from manilaclient.openstack.common.apiclient import base as common_base
+from manilaclient.v1 import share_instances
 
 
 class Share(common_base.Resource):
@@ -40,9 +41,13 @@ class Share(common_base.Resource):
         """Unmanage this share."""
         self.manager.unmanage(self, **kwargs)
 
-    def delete(self):
+    def migrate_share(self, host, force_host_copy):
+        """Migrate the share to a new host."""
+        self.manager.migrate_share(self, host, force_host_copy)
+
+    def delete(self, consistency_group_id=None):
         """Delete this share."""
-        self.manager.delete(self)
+        self.manager.delete(self, consistency_group_id=consistency_group_id)
 
     def force_delete(self):
         """Delete the specified share ignoring its current state."""
@@ -131,6 +136,14 @@ class Share(common_base.Resource):
         """Extend the size of the specified share."""
         self.manager.extend(self, new_size)
 
+    def shrink(self, new_size):
+        """Shrink the size of the specified share."""
+        self.manager.shrink(self, new_size)
+
+    def list_instances(self):
+        """List instances of the specified share."""
+        self.manager.list_instances(self)
+
 
 class ShareManager(base.ManagerWithFind):
     """Manage :class:`Share` resources."""
@@ -138,7 +151,8 @@ class ShareManager(base.ManagerWithFind):
 
     def create(self, share_proto, size, snapshot_id=None, name=None,
                description=None, metadata=None, share_network=None,
-               share_type=None, is_public=False):
+               share_type=None, is_public=False, availability_zone=None,
+               consistency_group_id=None):
         """Create a share.
 
         :param share_proto: text - share protocol for new share
@@ -151,6 +165,8 @@ class ShareManager(base.ManagerWithFind):
         :param share_network: either instance of ShareNetwork or text with ID
         :param share_type: either instance of ShareType or text with ID
         :param is_public: bool, whether to set share as public or not.
+        :param consistency_group_id: text - ID of the consistency group to
+            which the share should belong
         :rtype: :class:`Share`
         """
         share_metadata = metadata if metadata is not None else dict()
@@ -163,9 +179,23 @@ class ShareManager(base.ManagerWithFind):
             'share_proto': share_proto,
             'share_network_id': common_base.getid(share_network),
             'share_type': common_base.getid(share_type),
-            'is_public': is_public
+            'is_public': is_public,
+            'availability_zone': availability_zone,
+            'consistency_group_id': consistency_group_id,
         }
         return self._create('/shares', {'share': body}, 'share')
+
+    def migrate_share(self, share, host, force_host_copy):
+        """Migrate share to new host and pool.
+
+        :param share: The :class:'share' to migrate
+        :param host: The destination host and pool
+        :param force_host_copy: Skip driver optimizations
+        """
+
+        return self._action('os-migrate_share',
+                            share, {'host': host,
+                                    'force_host_copy': force_host_copy})
 
     def manage(self, service_host, protocol, export_path,
                driver_options=None, share_type=None,
@@ -292,12 +322,17 @@ class ShareManager(base.ManagerWithFind):
 
         return self._list(path, 'shares')
 
-    def delete(self, share):
+    def delete(self, share, consistency_group_id=None):
         """Delete a share.
 
         :param share: either share object or text with its ID.
+        :param consistency_group_id: text - ID of the consistency group to
+            which the share belongs to.
         """
-        self._delete("/shares/%s" % common_base.getid(share))
+        url = "/shares/%s" % common_base.getid(share)
+        if consistency_group_id:
+            url += "?consistency_group_id=%s" % consistency_group_id
+        self._delete(url)
 
     def force_delete(self, share):
         """Delete a share forcibly - share status will be avoided.
@@ -412,3 +447,22 @@ class ShareManager(base.ManagerWithFind):
         :param new_size: The desired size to extend share to.
         """
         return self._action('os-extend', share, {'new_size': new_size})
+
+    def shrink(self, share, new_size):
+        """Shrink the size of the specified share.
+
+        :param share: either share object or text with its ID.
+        :param new_size: The desired size to shrink share to.
+        """
+        return self._action('os-shrink', share, {'new_size': new_size})
+
+    def list_instances(self, share):
+        """List instances of the specified share.
+
+        :param share: either share object or text with its ID.
+        """
+        return self._list(
+            '/shares/%s/instances' % common_base.getid(share),
+            'share_instances',
+            obj_class=share_instances.ShareInstance
+        )

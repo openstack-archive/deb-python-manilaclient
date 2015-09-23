@@ -17,14 +17,18 @@ from keystoneclient.v2_0 import client as keystone_client_v2
 from keystoneclient.v3 import client as keystone_client_v3
 import six
 
+from manilaclient.common import constants
 from manilaclient import exceptions
 from manilaclient import httpclient
+from manilaclient.v1 import consistency_group_snapshots as cg_snapshots
+from manilaclient.v1 import consistency_groups
 from manilaclient.v1 import limits
 from manilaclient.v1 import quota_classes
 from manilaclient.v1 import quotas
 from manilaclient.v1 import scheduler_stats
 from manilaclient.v1 import security_services
 from manilaclient.v1 import services
+from manilaclient.v1 import share_instances
 from manilaclient.v1 import share_networks
 from manilaclient.v1 import share_servers
 from manilaclient.v1 import share_snapshots
@@ -58,16 +62,17 @@ class Client(object):
         >>> client.shares.list()
         ...
     """
-    def __init__(self, username=None, api_key=None, project_id=None,
-                 auth_url=None, insecure=False, timeout=None, tenant_id=None,
-                 project_name=None, region_name=None,
+    def __init__(self, username=None, api_key=None,
+                 project_id=None, auth_url=None, insecure=False, timeout=None,
+                 tenant_id=None, project_name=None, region_name=None,
                  endpoint_type='publicURL', extensions=None,
-                 service_type='share', service_name=None, retries=None,
-                 http_log_debug=False, input_auth_token=None, session=None,
-                 auth=None, cacert=None, service_catalog_url=None,
-                 user_agent='python-manilaclient',
+                 service_type=constants.V1_SERVICE_TYPE, service_name=None,
+                 retries=None, http_log_debug=False, input_auth_token=None,
+                 session=None, auth=None, cacert=None,
+                 service_catalog_url=None, user_agent='python-manilaclient',
                  use_keyring=False, force_new_token=False,
-                 cached_token_lifetime=300, **kwargs):
+                 cached_token_lifetime=300,
+                 api_version=constants.V1_API_VERSION, **kwargs):
         service_name = kwargs.get("share_service_name", service_name)
 
         def check_deprecated_arguments():
@@ -157,7 +162,8 @@ class Client(object):
                                             cacert=cacert,
                                             timeout=timeout,
                                             retries=retries,
-                                            http_log_debug=http_log_debug)
+                                            http_log_debug=http_log_debug,
+                                            api_version=api_version)
 
         self.limits = limits.LimitsManager(self)
         self.services = services.ServiceManager(self)
@@ -168,12 +174,17 @@ class Client(object):
         self.quotas = quotas.QuotaSetManager(self)
 
         self.shares = shares.ShareManager(self)
+        self.share_instances = share_instances.ShareInstanceManager(self)
         self.share_snapshots = share_snapshots.ShareSnapshotManager(self)
 
         self.share_types = share_types.ShareTypeManager(self)
         self.share_type_access = share_type_access.ShareTypeAccessManager(self)
         self.share_servers = share_servers.ShareServerManager(self)
         self.pools = scheduler_stats.PoolManager(self)
+        self.consistency_groups = (
+            consistency_groups.ConsistencyGroupManager(self))
+        self.cg_snapshots = (
+            cg_snapshots.ConsistencyGroupSnapshotManager(self))
 
         self._load_extensions(extensions)
 

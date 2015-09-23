@@ -29,8 +29,42 @@ class FakeClient(fakes.FakeClient):
                                service_catalog_url='http://localhost:8786')
         self.client = FakeHTTPClient(**kwargs)
 
+fake_share_instance = {
+    'id': 1234,
+    'share_id': 'fake',
+    'status': 'available',
+    'availability_zone': 'fake',
+    'share_network_id': 'fake',
+    'share_server_id': 'fake',
+}
+
 
 class FakeHTTPClient(fakes.FakeHTTPClient):
+
+    def get_(self, **kw):
+        body = {
+            "versions": [
+                {
+                    "status": "CURRENT",
+                    "updated": "2015-07-30T11:33:21Z",
+                    "links": [
+                        {
+                            "href": "http://docs.openstack.org/",
+                            "type": "text/html",
+                            "rel": "describedby",
+                        },
+                        {
+                            "href": "http://localhost:8786/v1/",
+                            "rel": "self",
+                        }
+                    ],
+                    "min_version": "1.0",
+                    "version": "1.1",
+                    "id": "v1.0",
+                }
+            ]
+        }
+        return (200, {}, body)
 
     def get_shares_1234(self, **kw):
         share = {'share': {'id': 1234, 'name': 'sharename'}}
@@ -94,6 +128,39 @@ class FakeHTTPClient(fakes.FakeHTTPClient):
             assert body[action] is None
         else:
             raise AssertionError("Unexpected action: %s" % action)
+        return (resp, {}, _body)
+
+    def _share_instances(self):
+        instances = {
+            'share_instances': [
+                fake_share_instance
+            ]
+        }
+        return (200, {}, instances)
+
+    def get_share_instances(self, **kw):
+        return self._share_instances()
+
+    def get_shares_fake_instances(self, **kw):
+        return self._share_instances()
+
+    def get_shares_1234_instances(self, **kw):
+        return self._share_instances()
+
+    def get_share_instances_1234(self):
+        return (200, {}, {'share_instance': fake_share_instance})
+
+    def post_share_instances_1234_action(self, body, **kw):
+        _body = None
+        resp = 202
+        assert len(list(body)) == 1
+        action = list(body)[0]
+        if action == 'os-reset_status':
+            assert 'status' in body['os-reset_status']
+        elif action == 'os-force_delete':
+            assert body[action] is None
+        else:
+            raise AssertionError("Unexpected share action: %s" % action)
         return (resp, {}, _body)
 
     def get_snapshots(self, **kw):
@@ -161,7 +228,7 @@ class FakeHTTPClient(fakes.FakeHTTPClient):
             assert 'status' in body['os-reset_status']
         elif action == 'os-force_delete':
             assert body[action] is None
-        elif action == 'os-extend':
+        elif action in ('os-extend', 'os-shrink'):
             assert body[action] is not None
             assert body[action]['new_size'] is not None
         else:
@@ -277,6 +344,14 @@ class FakeHTTPClient(fakes.FakeHTTPClient):
         }
         return (200, {}, security_services)
 
+    def get_security_services_1111(self, **kw):
+        ss = {'security_service': {'id': 1111, 'name': 'fake_ss'}}
+        return (200, {}, ss)
+
+    def put_security_services_1111(self, **kwargs):
+        ss = {'security_service': {'id': 1111, 'name': 'fake_ss'}}
+        return (200, {}, ss)
+
     def get_scheduler_stats_pools(self, **kw):
         pools = {
             'pools': [
@@ -295,6 +370,97 @@ class FakeHTTPClient(fakes.FakeHTTPClient):
             ]
         }
         return (200, {}, pools)
+
+    def get_consistency_groups_detail(self, **kw):
+        consistency_groups = {
+            'consistency_groups': [
+                {
+                    'id': 1234,
+                    'status': 'available',
+                    'name': 'cgname',
+                    'description': 'my cg'
+                }
+            ]
+        }
+        return (200, {}, consistency_groups)
+
+    def delete_consistency_groups_1234(self, **kw):
+        return (202, {}, None)
+
+    def post_consistency_groups_1234_action(self, **kw):
+        return (202, {}, None)
+
+    def post_consistency_groups(self, body, **kw):
+        return (202, {}, {
+            'consistency_group': {
+                'id': 'fake-cg-id',
+                'name': 'fake_name'
+            }
+        })
+
+    def get_cgsnapshots_fake_cg_id_members(self, **kw):
+        members = {
+            'cgsnapshot_members': [
+                {
+                    'id': 1234,
+                    'name': 'fake name',
+                    'created_at': '05050505',
+                    'size': '50PB',
+                    'share_protocol': 'NFS',
+                    'project_id': '2221234',
+                    'share_type_id': '3331234',
+                },
+                {
+                    'id': 4321,
+                    'name': 'fake name 2',
+                    'created_at': '03030303',
+                    'size': '50PB',
+                    'share_protocol': 'NFS',
+                    'project_id': '2224321',
+                    'share_type_id': '3334321',
+                }
+            ]
+        }
+        return(200, {}, members)
+
+    def get_cgsnapshots(self, **kw):
+        cg_snapshots = {
+            'cgsnapshots': [
+                {
+                    'id': 1234,
+                    'status': 'available',
+                    'name': 'cgsnapshotname',
+                }
+            ]
+        }
+        return (200, {}, cg_snapshots)
+
+    def get_cgsnapshots_detail(self, **kw):
+        cg_snapshots = {
+            'cgsnapshots': [
+                {
+                    'id': 1234,
+                    'status': 'available',
+                    'name': 'cgsnapshotname',
+                    'description': 'my cgsnapshot'
+                }
+            ]
+        }
+        return (200, {}, cg_snapshots)
+
+    def delete_cgsnapshots_1234(self, **kw):
+        return (202, {}, None)
+
+    def post_cgsnapshots_1234_action(self, **kw):
+        return (202, {}, None)
+
+    def post_cgsnapshots(self, body, **kw):
+        return (202, {}, {
+            'cgsnapshot': {
+                'id': 3,
+                'name': 'cust_snapshot',
+            }
+        })
 
     #
     # Set/Unset metadata

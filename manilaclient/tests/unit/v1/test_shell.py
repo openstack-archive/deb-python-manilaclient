@@ -29,6 +29,7 @@ from manilaclient.openstack.common import cliutils
 from manilaclient import shell
 from manilaclient.tests.unit import utils as test_utils
 from manilaclient.tests.unit.v1 import fakes
+from manilaclient.v1 import share_instances
 from manilaclient.v1 import shell as shell_v1
 
 
@@ -62,6 +63,7 @@ class ShellTest(test_utils.TestCase):
         self.separators = [' ', '=']
         self.create_share_body = {
             "share": {
+                "consistency_group_id": None,
                 "share_type": None,
                 "name": None,
                 "snapshot_id": None,
@@ -71,6 +73,7 @@ class ShellTest(test_utils.TestCase):
                 "share_network_id": None,
                 "size": 1,
                 "is_public": False,
+                "availability_zone": None,
             }
         }
 
@@ -266,13 +269,57 @@ class ShellTest(test_utils.TestCase):
         self.assert_called('GET', '/share-networks/detail')
 
     @mock.patch.object(cliutils, 'print_list', mock.Mock())
+    def test_share_instance_list(self):
+        self.run_command('share-instance-list')
+
+        self.assert_called('GET', '/share_instances')
+        cliutils.print_list.assert_called_once_with(
+            mock.ANY,
+            ['ID', 'Share ID', 'Host', 'Status', 'Availability Zone',
+             'Share Network ID', 'Share Server ID'])
+
+    @mock.patch.object(apiclient_utils, 'find_resource',
+                       mock.Mock(return_value='fake'))
+    def test_share_instance_list_with_share(self):
+        self.run_command('share-instance-list --share-id=fake')
+        self.assert_called('GET', '/shares/fake/instances')
+
+    def test_share_instance_list_invalid_share(self):
+        self.assertRaises(
+            exceptions.CommandError,
+            self.run_command,
+            'share-instance-list --share-id=not-found-id',
+        )
+
+    def test_share_instance_show(self):
+        self.run_command('share-instance-show 1234')
+        self.assert_called('GET', '/share_instances/1234')
+
+    def test_share_instance_reset_state(self):
+        self.run_command('share-instance-reset-state 1234')
+        expected = {'os-reset_status': {'status': 'available'}}
+        self.assert_called('POST', '/share_instances/1234/action',
+                           body=expected)
+
+    def test_share_instance_force_delete(self):
+        manager_mock = mock.Mock()
+        share_instance = share_instances.ShareInstance(
+            manager_mock, {'id': 'fake'}, True)
+
+        with mock.patch.object(shell_v1, '_find_share_instance',
+                               mock.Mock(return_value=share_instance)):
+            self.run_command('share-instance-force-delete 1234')
+            manager_mock.force_delete.assert_called_once_with(share_instance)
+
+    @mock.patch.object(cliutils, 'print_list', mock.Mock())
     def test_type_list(self):
         self.run_command('type-list')
 
         self.assert_called('GET', '/types')
         cliutils.print_list.assert_called_once_with(
             mock.ANY,
-            ['ID', 'Name', 'Visibility', 'is_default', 'required_extra_specs'],
+            ['ID', 'Name', 'Visibility', 'is_default', 'required_extra_specs',
+             'optional_extra_specs'],
             mock.ANY)
 
     def test_type_list_default_volume_type(self):
@@ -288,7 +335,10 @@ class ShellTest(test_utils.TestCase):
         expected = {
             'share_type': {
                 'name': 'test-type-3',
-                'extra_specs': {'driver_handles_share_servers': False},
+                'extra_specs': {
+                    'driver_handles_share_servers': False,
+                    'snapshot_support': True,
+                },
                 'os-share-type-access:is_public': public
             }
         }
@@ -329,7 +379,8 @@ class ShellTest(test_utils.TestCase):
             'Is Public',
             'Share Type',
             'Export location',
-            'Host'
+            'Host',
+            'Availability Zone'
         ]
         self.run_command('list --public')
         self.assert_called('GET', '/shares/detail?is_public=True')
@@ -379,6 +430,19 @@ class ShellTest(test_utils.TestCase):
     def test_delete(self):
         self.run_command('delete 1234')
         self.assert_called('DELETE', '/shares/1234')
+
+    @ddt.data(
+        '--cg 1234', '--consistency-group 1234', '--consistency_group 1234')
+    @mock.patch.object(shell_v1, '_find_consistency_group', mock.Mock())
+    def test_delete_with_cg(self, cg_cmd):
+        fcg = type(
+            'FakeConsistencyGroup', (object,), {'id': cg_cmd.split()[-1]})
+        shell_v1._find_consistency_group.return_value = fcg
+
+        self.run_command('delete 1234 %s' % cg_cmd)
+
+        self.assert_called('DELETE', '/shares/1234?consistency_group_id=1234')
+        self.assertTrue(shell_v1._find_consistency_group.called)
 
     def test_delete_not_found(self):
         self.assertRaises(
@@ -497,19 +561,12 @@ class ShellTest(test_utils.TestCase):
         cliutils.print_list.assert_called_once_with(
             mock.ANY, ['ID', 'Name', 'all_extra_specs'], mock.ANY)
 
-    def test_type_create_without_required_extra_spec(self):
-        self.assertRaises(
-            exceptions.CommandError,
-            self.run_command,
-            'type-create test',
-        )
-
     @ddt.data('fake', 'FFFalse', 'trueee')
-    def test_type_create_invalid_extra_spec(self, extra_spec):
+    def test_type_create_invalid_dhss_value(self, value):
         self.assertRaises(
             exceptions.CommandError,
             self.run_command,
-            'type-create test ' + extra_spec,
+            'type-create test ' + value,
         )
 
     @ddt.unpack
@@ -523,7 +580,8 @@ class ShellTest(test_utils.TestCase):
                 "name": "test",
                 "os-share-type-access:is_public": True,
                 "extra_specs": {
-                    "driver_handles_share_servers": expected_bool
+                    "driver_handles_share_servers": expected_bool,
+                    "snapshot_support": True,
                 }
             }
         }
@@ -531,6 +589,37 @@ class ShellTest(test_utils.TestCase):
         self.run_command('type-create test ' + text)
 
         self.assert_called('POST', '/types', body=expected)
+
+    @ddt.unpack
+    @ddt.data(
+        *([{'expected_bool': True, 'text': v}
+           for v in ('true', 'True', '1', 'TRUE', 'tRuE')] +
+          [{'expected_bool': False, 'text': v}
+           for v in ('false', 'False', '0', 'FALSE', 'fAlSe')])
+    )
+    def test_create_with_snapshot_support(self, expected_bool, text):
+        expected = {
+            "share_type": {
+                "name": "test",
+                "os-share-type-access:is_public": True,
+                "extra_specs": {
+                    "driver_handles_share_servers": False,
+                    "snapshot_support": expected_bool,
+                }
+            }
+        }
+
+        self.run_command('type-create test false --snapshot-support ' + text)
+
+        self.assert_called('POST', '/types', body=expected)
+
+    @ddt.data('fake', 'FFFalse', 'trueee')
+    def test_type_create_invalid_snapshot_support_value(self, value):
+        self.assertRaises(
+            exceptions.CommandError,
+            self.run_command,
+            'type-create test false --snapshot-support ' + value,
+        )
 
     @ddt.data('--is-public', '--is_public')
     def test_update(self, alias):
@@ -645,6 +734,11 @@ class ShellTest(test_utils.TestCase):
         expected = {'os-reset_status': {'status': 'available'}}
         self.assert_called('POST', '/shares/1234/action', body=expected)
 
+    def test_shrink(self):
+        self.run_command('shrink 1234 77')
+        expected = {'os-shrink': {'new_size': 77}}
+        self.assert_called('POST', '/shares/1234/action', body=expected)
+
     def test_reset_state_with_flag(self):
         self.run_command('reset-state --state error 1234')
         expected = {'os-reset_status': {'status': 'error'}}
@@ -691,7 +785,17 @@ class ShellTest(test_utils.TestCase):
          '--name': 'fake_name',
          '--neutron_net_id': 'fake_neutron_net_id',
          '--neutron_subnet_id': 'fake_neutron_subnet_id',
-         '--nova_net_id': 'fake_nova_net_id'})
+         '--nova_net_id': 'fake_nova_net_id'},
+        {'--name': '""'},
+        {'--description': '""'},
+        {'--nova_net_id': '""'},
+        {'--neutron_net_id': '""'},
+        {'--neutron_subnet_id': '""'},
+        {'--description': '""',
+         '--name': '""',
+         '--neutron_net_id': '""',
+         '--neutron_subnet_id': '""',
+         '--nova_net_id': '""'},)
     def test_share_network_update(self, data):
         cmd = 'share-network-update 1111'
         expected = dict()
@@ -1132,6 +1236,47 @@ class ShellTest(test_utils.TestCase):
             mock.ANY,
             fields=['id', 'name', 'status', 'type'])
 
+    @ddt.data(
+        {'--name': 'fake_name'},
+        {'--description': 'fake_description'},
+        {'--dns-ip': 'fake_dns_ip'},
+        {'--domain': 'fake_domain'},
+        {'--server': 'fake_server'},
+        {'--user': 'fake_user'},
+        {'--password': 'fake_password'},
+        {'--name': 'fake_name',
+         '--description': 'fake_description',
+         '--dns-ip': 'fake_dns_ip',
+         '--domain': 'fake_domain',
+         '--server': 'fake_server',
+         '--user': 'fake_user',
+         '--password': 'fake_password'},
+        {'--name': '""'},
+        {'--description': '""'},
+        {'--dns-ip': '""'},
+        {'--domain': '""'},
+        {'--server': '""'},
+        {'--user': '""'},
+        {'--password': '""'},
+        {'--name': '""',
+         '--description': '""',
+         '--dns-ip': '""',
+         '--domain': '""',
+         '--server': '""',
+         '--user': '""',
+         '--password': '""'},)
+    def test_security_service_update(self, data):
+        cmd = 'security-service-update 1111'
+        expected = dict()
+        for k, v in data.items():
+            cmd += ' ' + k + ' ' + v
+            expected[k[2:].replace('-', '_')] = v
+        expected = dict(security_service=expected)
+
+        self.run_command(cmd)
+
+        self.assert_called('PUT', '/security-services/1111', body=expected)
+
     @mock.patch.object(cliutils, 'print_list', mock.Mock())
     def test_pool_list(self):
         self.run_command('pool-list')
@@ -1154,3 +1299,144 @@ class ShellTest(test_utils.TestCase):
         cliutils.print_list.assert_called_with(
             mock.ANY,
             fields=["Name", "Host", "Backend", "Pool"])
+
+    @mock.patch.object(cliutils, 'print_list', mock.Mock())
+    def test_api_version(self):
+        self.run_command('api-version')
+        self.assert_called('GET', '')
+        cliutils.print_list.assert_called_with(
+            mock.ANY,
+            ['ID', 'Status', 'Version', 'Min_version'],
+            field_labels=['ID', 'Status', 'Version', 'Minimum Version'])
+
+    @mock.patch.object(cliutils, 'print_list', mock.Mock())
+    def test_cg_list(self):
+        self.run_command('cg-list')
+        self.assert_called('GET', '/consistency-groups/detail')
+
+        cliutils.print_list.assert_called_once_with(
+            mock.ANY, fields=['id', 'name', 'description', 'status'])
+
+    @ddt.data(
+        '--source-cgsnapshot-id fake-cg-id',
+        '--name fake_name --source-cgsnapshot-id fake-cg-id',
+        '--description my_fake_description --name fake_name',
+    )
+    def test_cg_create(self, data):
+        cmd = 'cg-create' + ' ' + data
+        self.run_command(cmd)
+        self.assert_called('POST', '/consistency-groups')
+
+    @mock.patch.object(shell_v1, '_find_consistency_group', mock.Mock())
+    def test_cg_delete(self):
+        fcg = type('FakeConsistencyGroup', (object,), {'id': '1234'})
+        shell_v1._find_consistency_group.return_value = fcg
+
+        self.run_command('cg-delete fake-cg')
+        self.assert_called('DELETE', '/consistency-groups/1234')
+
+    @mock.patch.object(shell_v1, '_find_consistency_group', mock.Mock())
+    def test_cg_delete_force(self):
+        fcg = type('FakeConsistencyGroup', (object,), {'id': '1234'})
+        shell_v1._find_consistency_group.return_value = fcg
+
+        self.run_command('cg-delete --force fake-cg')
+        self.assert_called('POST', '/consistency-groups/1234/action',
+                           {'os-force_delete': None})
+
+    @mock.patch.object(shell_v1, '_find_consistency_group', mock.Mock())
+    def test_cg_reset_state_with_flag(self):
+        fcg = type('FakeConsistencyGroup', (object,), {'id': '1234'})
+        shell_v1._find_consistency_group.return_value = fcg
+
+        self.run_command('cg-reset-state --state error 1234')
+        self.assert_called('POST', '/consistency-groups/1234/action',
+                           {'os-reset_status': {'status': 'error'}})
+
+    @mock.patch.object(shell_v1, '_find_cg_snapshot', mock.Mock())
+    def test_cg_snapshot_reset_state(self):
+        fcg = type('FakeConsistencyGroup', (object,), {'id': '1234'})
+        shell_v1._find_cg_snapshot.return_value = fcg
+
+        self.run_command('cg-snapshot-reset-state 1234')
+        self.assert_called('POST', '/cgsnapshots/1234/action',
+                           {'os-reset_status': {'status': 'available'}})
+
+    @mock.patch.object(shell_v1, '_find_cg_snapshot', mock.Mock())
+    def test_cg_snapshot_reset_state_with_flag(self):
+        fcg = type('FakeConsistencyGroup', (object,), {'id': '1234'})
+        shell_v1._find_cg_snapshot.return_value = fcg
+
+        self.run_command('cg-snapshot-reset-state --state creating 1234')
+        self.assert_called('POST', '/cgsnapshots/1234/action',
+                           {'os-reset_status': {'status': 'creating'}})
+
+    @mock.patch.object(cliutils, 'print_list', mock.Mock())
+    def test_cg_snapshot_list(self):
+        self.run_command('cg-snapshot-list')
+        self.assert_called('GET', '/cgsnapshots/detail')
+
+        cliutils.print_list.assert_called_once_with(
+            mock.ANY, fields=['id', 'name', 'description', 'status'])
+
+    @mock.patch.object(cliutils, 'print_list', mock.Mock())
+    @mock.patch.object(shell_v1, '_find_cg_snapshot', mock.Mock())
+    def test_cg_snapshot_members(self):
+        fcg = type('FakeConsistencyGroup', (object,), {'id': 'fake-cg-id'})
+        shell_v1._find_cg_snapshot.return_value = fcg
+
+        self.run_command('cg-snapshot-members fake-cg-id')
+        self.assert_called('GET', '/cgsnapshots/fake-cg-id/members')
+        shell_v1._find_cg_snapshot.assert_called_with(mock.ANY, fcg.id)
+
+        cliutils.print_list.assert_called_once_with(
+            mock.ANY, fields=['Id', 'Size', 'Created_at',
+                              'Share_protocol', 'Share_id', 'Share_type_id'])
+
+    def test_cg_snapshot_list_all_tenants_only_key(self):
+        self.run_command('cg-snapshot-list --all-tenants')
+        self.assert_called('GET', '/cgsnapshots/detail?all_tenants=1')
+
+    def test_cg_snapshot_list_all_tenants_key_and_value_1(self):
+        for separator in self.separators:
+            self.run_command(
+                'cg-snapshot-list --all-tenants' + separator + '1')
+            self.assert_called('GET', '/cgsnapshots/detail?all_tenants=1')
+
+    def test_cg_snapshot_list_with_filters(self):
+        self.run_command('cg-snapshot-list --limit 10 --offset 0')
+        self.assert_called('GET', '/cgsnapshots/detail?limit=10&offset=0')
+
+    @ddt.data(
+        'fake-cg-id',
+        '--name fake_name fake-cg-id',
+        "--description my_fake_description --name fake_name  fake-cg-id",
+    )
+    @mock.patch.object(shell_v1, '_find_consistency_group', mock.Mock())
+    def test_cg_snapshot_create(self, data):
+        fcg = type('FakeConsistencyGroup', (object,), {'id': 'fake-cg-id'})
+        shell_v1._find_consistency_group.return_value = fcg
+
+        cmd = 'cg-snapshot-create' + ' ' + data
+
+        self.run_command(cmd)
+
+        shell_v1._find_consistency_group.assert_called_with(mock.ANY, fcg.id)
+        self.assert_called('POST', '/cgsnapshots')
+
+    @mock.patch.object(shell_v1, '_find_cg_snapshot', mock.Mock())
+    def test_cg_snapshot_delete(self):
+        fcg = type('FakeConsistencyGroup', (object,), {'id': '1234'})
+        shell_v1._find_cg_snapshot.return_value = fcg
+
+        self.run_command('cg-snapshot-delete fake-cg')
+        self.assert_called('DELETE', '/cgsnapshots/1234')
+
+    @mock.patch.object(shell_v1, '_find_cg_snapshot', mock.Mock())
+    def test_cg_snapshot_delete_force(self):
+        fcg = type('FakeConsistencyGroup', (object,), {'id': '1234'})
+        shell_v1._find_cg_snapshot.return_value = fcg
+
+        self.run_command('cg-snapshot-delete --force fake-cg')
+        self.assert_called('POST', '/cgsnapshots/1234/action',
+                           {'os-force_delete': None})

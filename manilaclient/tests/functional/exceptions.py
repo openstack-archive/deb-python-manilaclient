@@ -34,3 +34,19 @@ class InvalidData(exceptions.TempestException):
 
 class ShareTypeNotFound(exceptions.NotFound):
     message = "Share type '%(share_type)s' was not found"
+
+
+class InvalidConfiguration(exceptions.TempestException):
+    message = "Invalid configuration: %(reason)s"
+
+
+class ShareBuildErrorException(exceptions.TempestException):
+    message = "Share %(share)s failed to build and is in ERROR status"
+
+
+class AccessRuleCreateErrorException(exceptions.TempestException):
+    message = "Access rule %(access)s failed to create and is in ERROR state."
+
+
+class AccessRuleDeleteErrorException(exceptions.TempestException):
+    message = "Access rule %(access)s failed to delete and is in ERROR state."
