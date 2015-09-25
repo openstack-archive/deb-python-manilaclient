@@ -1,3 +1,9 @@
+python-manilaclient (1.4.0-2) UNRELEASED; urgency=medium
+
+  * Update watch file to use Debian pypi redirector.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Fri, 25 Sep 2015 09:59:39 -0400
+
 python-manilaclient (1.4.0-1) experimental; urgency=medium
 
   * New upstream release.
