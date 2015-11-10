@@ -201,7 +201,7 @@ def do_api_version(cs, args):
 def do_endpoints(cs, args):
     """Discover endpoints that get returned from the authenticate services."""
     catalog = cs.keystone_client.service_catalog.catalog
-    for e in catalog['serviceCatalog']:
+    for e in catalog.get('serviceCatalog', catalog.get('catalog')):
         cliutils.print_dict(e['endpoints'][0], e['name'])
 
 
@@ -209,7 +209,17 @@ def do_credentials(cs, args):
     """Show user credentials returned from auth."""
     catalog = cs.keystone_client.service_catalog.catalog
     cliutils.print_dict(catalog['user'], "User Credentials")
-    cliutils.print_dict(catalog['token'], "Token")
+    if not catalog['version'] == 'v3':
+        data = catalog['token']
+    else:
+        data = {
+            'issued_at': catalog['issued_at'],
+            'expires': catalog['expires_at'],
+            'id': catalog['auth_token'],
+            'audit_ids': catalog['audit_ids'],
+            'tenant': catalog['project'],
+        }
+    cliutils.print_dict(data, "Token")
 
 _quota_resources = [
     'shares',
@@ -366,7 +376,7 @@ def do_quota_class_show(cs, args):
 
 
 @cliutils.arg(
-    'class-name',
+    'class_name',
     metavar='<class-name>',
     help='Name of quota class to set the quotas for.')
 @cliutils.arg(
@@ -397,9 +407,11 @@ def do_quota_class_show(cs, args):
     help='New value for the "snapshot_gigabytes" quota.')
 @cliutils.arg(
     '--share-networks',
+    '--share_networks',  # alias
     metavar='<share-networks>',
     type=int,
     default=None,
+    action='single_alias',
     help='New value for the "share_networks" quota.')
 @cliutils.service_type('sharev2')
 def do_quota_class_update(cs, args):
@@ -607,7 +619,7 @@ def do_metadata_update_all(cs, args):
     metavar='<export_path>',
     type=str,
     help='Share export path, NFS share such as: 10.0.0.1:/foo_path, '
-         'CIFS share such as: \\10.0.0.1\foo_name_of_cifs_share')
+         'CIFS share such as: \\\\10.0.0.1\\foo_name_of_cifs_share')
 @cliutils.arg(
     '--name',
     metavar='<name>',

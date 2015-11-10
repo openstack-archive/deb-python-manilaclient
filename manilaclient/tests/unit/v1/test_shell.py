@@ -99,6 +99,69 @@ class ShellTest(test_utils.TestCase):
     def assert_called_anytime(self, method, url, body=None):
         return self.shell.cs.assert_called_anytime(method, url, body)
 
+    @ddt.data(
+        {'serviceCatalog': [{'name': 'foo', 'endpoints': ['bar']}]},
+        {'catalog': [{'name': 'foo', 'endpoints': ['bar']}]},
+        {'serviceCatalog': [{'name': 'foo', 'endpoints': ['bar']}],
+         'catalog': 'fake'},
+    )
+    def test_do_endpoints(self, catalog):
+        cs = type('Fake', (object, ), {'keystone_client': type(
+            'FakeKeystoneClient', (object, ), {
+                'service_catalog': type('FakeCatalog', (object, ), {
+                    'catalog': catalog})})})
+
+        with mock.patch.object(
+                shell_v1.cliutils, 'print_dict') as mock_print_dict:
+            shell_v1.do_endpoints(cs, ('no', 'args'))
+
+            mock_print_dict.assert_has_calls([
+                mock.call('bar', 'foo'),
+            ])
+
+    @ddt.data(
+        {'version': 'v3',
+         'user': 'foo_user',
+         'issued_at': 'foo_issued_at',
+         'expires_at': 'foo_expires',
+         'auth_token': 'foo_ids',
+         'audit_ids': 'foo_audit_ids',
+         'project': 'foo_tenant_project',
+         'redundant_key': 'should not be used',
+         },
+        {'version': 'v2.0',
+         'user': 'foo_user',
+         'token': {
+             'issued_at': 'foo_issued_at',
+             'expires': 'foo_expires',
+             'id': 'foo_ids',
+             'audit_ids': 'foo_audit_ids',
+             'tenant': 'foo_tenant_project',
+         },
+         },
+    )
+    def test_do_credentials(self, catalog):
+        cs = type('Fake', (object, ), {'keystone_client': type(
+            'FakeKeystoneClient', (object, ), {
+                'service_catalog': type('FakeCatalog', (object, ), {
+                    'catalog': catalog})})})
+        expected_call_data = {
+            'issued_at': 'foo_issued_at',
+            'expires': 'foo_expires',
+            'id': 'foo_ids',
+            'audit_ids': 'foo_audit_ids',
+            'tenant': 'foo_tenant_project',
+        }
+
+        with mock.patch.object(
+                shell_v1.cliutils, 'print_dict') as mock_print_dict:
+            shell_v1.do_credentials(cs, ('no', 'args'))
+
+            mock_print_dict.assert_has_calls([
+                mock.call('foo_user', 'User Credentials'),
+                mock.call(expected_call_data, 'Token'),
+            ])
+
     def test_list(self):
         self.run_command('list')
         # NOTE(jdg): we default to detail currently
@@ -1440,3 +1503,29 @@ class ShellTest(test_utils.TestCase):
         self.run_command('cg-snapshot-delete --force fake-cg')
         self.assert_called('POST', '/cgsnapshots/1234/action',
                            {'os-force_delete': None})
+
+    @ddt.data(
+        {'--shares': 5},
+        {'--snapshots': 5},
+        {'--gigabytes': 5},
+        {'--snapshot-gigabytes': 5},
+        {'--snapshot_gigabytes': 5},
+        {'--share-networks': 5},
+        {'--share_networks': 5},
+        {'--shares': 5,
+         '--snapshots': 5,
+         '--gigabytes': 5,
+         '--snapshot-gigabytes': 5,
+         '--share-networks': 5})
+    def test_quota_class_update(self, data):
+        cmd = 'quota-class-update test'
+        expected = dict()
+        for k, v in data.items():
+            cmd += ' %(arg)s %(val)s' % {'arg': k, 'val': v}
+            expected[k[2:].replace('-', '_')] = v
+        expected['class_name'] = 'test'
+        expected = dict(quota_class_set=expected)
+
+        self.run_command(cmd)
+        self.assert_called('PUT', '/os-quota-class-sets/test',
+                           body=expected)
