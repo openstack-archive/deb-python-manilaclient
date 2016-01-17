@@ -15,6 +15,12 @@
 
 import six
 from tempest_lib.cli import output_parser
+import testtools
+
+from manilaclient import api_versions
+from manilaclient import config
+
+CONF = config.CONF
 
 
 def multi_line_row_table(output_lines, group_by_column_index=0):
@@ -85,3 +91,20 @@ def listing(output_lines):
             item[col_key] = row[col_idx]
         items.append(item)
     return items
+
+
+def is_microversion_supported(microversion):
+    return (
+        api_versions.APIVersion(CONF.min_api_microversion) <=
+        api_versions.APIVersion(microversion) <=
+        api_versions.APIVersion(CONF.max_api_microversion)
+    )
+
+
+def skip_if_microversion_not_supported(microversion):
+    """Decorator for tests that are microversion-specific."""
+    if not is_microversion_supported(microversion):
+        reason = ("Skipped. Test requires microversion %s that is not "
+                  "allowed to be used by configuration." % microversion)
+        return testtools.skip(reason)
+    return lambda f: f

@@ -13,34 +13,24 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from manilaclient import base
-from manilaclient.openstack.common.apiclient import base as common_base
-from manilaclient.openstack.common import cliutils
+import sys
+import warnings
+
+from manilaclient.v2.contrib import list_extensions
+
+warnings.warn(
+    "Module manilaclient.v1.contrib.list_extensions is deprecated "
+    "(taken as a basis for manilaclient.v2.contrib.list_extensions). "
+    "The preferable way to get a client class or object is to use "
+    "the manilaclient.client module.")
 
 
-class ListExtResource(common_base.Resource):
-    @property
-    def summary(self):
-        descr = self.description.strip()
-        if not descr:
-            return '??'
-        lines = descr.split("\n")
-        if len(lines) == 1:
-            return lines[0]
-        else:
-            return lines[0] + "..."
+class MovedModule(object):
+    def __init__(self, new_module):
+        self.new_module = new_module
 
+    def __getattr__(self, attr):
+        return getattr(self.new_module, attr)
 
-class ListExtManager(base.Manager):
-    resource_class = ListExtResource
-
-    def show_all(self):
-        return self._list("/extensions", 'extensions')
-
-
-@cliutils.service_type('share')
-def do_list_extensions(client, _args):
-    """List all the os-api extensions that are available."""
-    extensions = client.list_extensions.show_all()
-    fields = ["Name", "Summary", "Alias", "Updated"]
-    cliutils.print_list(extensions, fields)
+sys.modules["manilaclient.v1.contrib.list_extensions"] = MovedModule(
+    list_extensions)
