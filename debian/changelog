@@ -1,3 +1,9 @@
+python-manilaclient (1.6.0-3) UNRELEASED; urgency=medium
+
+  * Added more copyright holders.
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 18 Jan 2016 05:04:50 +0000
+
 python-manilaclient (1.6.0-2) experimental; urgency=medium
 
   * Added Python 3 support.
