@@ -1,6 +1,7 @@
 python-manilaclient (1.7.0-1) UNRELEASED; urgency=medium
 
   * New upstream release.
+  * d/control: Align depends with upstream.
 
  -- David Della Vecchia <ddv@canonical.com>  Fri, 19 Feb 2016 16:48:28 -0500
 
