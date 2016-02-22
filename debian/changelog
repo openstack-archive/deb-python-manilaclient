@@ -7,7 +7,10 @@ python-manilaclient (1.7.0-1) UNRELEASED; urgency=medium
   [ Thomas Goirand ]
   * Added more copyright holders.
 
- -- Corey Bryant <corey.bryant@canonical.com>  Mon, 22 Feb 2016 12:40:28 -0500
+  [ Corey Bryant ]
+  * d/control: Update uploaders.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Mon, 22 Feb 2016 12:43:53 -0500
 
 python-manilaclient (1.6.0-2) experimental; urgency=medium
 
