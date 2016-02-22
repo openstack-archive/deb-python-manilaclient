@@ -1,15 +1,13 @@
 python-manilaclient (1.7.0-1) UNRELEASED; urgency=medium
 
+  [ David Della Vecchia ]
   * New upstream release.
   * d/control: Align depends with upstream.
 
- -- David Della Vecchia <ddv@canonical.com>  Fri, 19 Feb 2016 16:48:28 -0500
-
-python-manilaclient (1.6.0-3) UNRELEASED; urgency=medium
-
+  [ Thomas Goirand ]
   * Added more copyright holders.
 
- -- Thomas Goirand <zigo@debian.org>  Mon, 18 Jan 2016 05:04:50 +0000
+ -- Corey Bryant <corey.bryant@canonical.com>  Mon, 22 Feb 2016 12:40:28 -0500
 
 python-manilaclient (1.6.0-2) experimental; urgency=medium
 
