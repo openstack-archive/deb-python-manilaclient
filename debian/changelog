@@ -1,4 +1,4 @@
-python-manilaclient (1.7.0-1) UNRELEASED; urgency=medium
+python-manilaclient (1.7.0-1) experimental; urgency=medium
 
   [ David Della Vecchia ]
   * New upstream release.
@@ -6,6 +6,7 @@ python-manilaclient (1.7.0-1) UNRELEASED; urgency=medium
 
   [ Thomas Goirand ]
   * Added more copyright holders.
+  * Standards-Version: 3.9.7 (no change).
 
   [ Corey Bryant ]
   * d/control: Update uploaders.
