@@ -16,6 +16,7 @@
 
 import collections
 import re
+import string
 try:
     from urllib import urlencode  # noqa
 except ImportError:
@@ -42,9 +43,25 @@ class Share(common_base.Resource):
         """Unmanage this share."""
         self.manager.unmanage(self, **kwargs)
 
-    def migrate_share(self, host, force_host_copy):
+    def migration_start(self, host, force_host_copy, notify=True):
         """Migrate the share to a new host."""
-        self.manager.migrate_share(self, host, force_host_copy)
+        self.manager.migration_start(self, host, force_host_copy, notify)
+
+    def migration_complete(self):
+        """Complete migration of a share."""
+        self.manager.migration_complete(self)
+
+    def migration_cancel(self):
+        """Attempts to cancel migration of a share."""
+        self.manager.migration_cancel(self)
+
+    def migration_get_progress(self):
+        """Obtain progress of migration of a share."""
+        return self.manager.migration_get_progress(self)
+
+    def reset_task_state(self, task_state):
+        """Reset the task state of a given share."""
+        self.manager.reset_task_state(self, task_state)
 
     def delete(self, consistency_group_id=None):
         """Delete this share."""
@@ -56,7 +73,6 @@ class Share(common_base.Resource):
 
     def allow(self, access_type, access, access_level):
         """Allow access to a share."""
-        self._validate_access(access_type, access)
         return self.manager.allow(self, access_type, access, access_level)
 
     def deny(self, id):
@@ -67,67 +83,9 @@ class Share(common_base.Resource):
         """Deny access from IP to a share."""
         return self.manager.access_list(self)
 
-    def _validate_access(self, access_type, access):
-        if access_type == 'ip':
-            self._validate_ip_range(access)
-        elif access_type == 'user':
-            self._validate_username(access)
-        elif access_type == 'cert':
-            # 'access' is used as the certificate's CN (common name)
-            # to which access is allowed or denied by the backend.
-            # The standard allows for just about any string in the
-            # common name. The meaning of a string depends on its
-            # interpretation and is limited to 64 characters.
-            self._validate_common_name(access.strip())
-        else:
-            raise exceptions.CommandError(
-                'Only ip, user, and cert types are supported')
-
     def update_all_metadata(self, metadata):
         """Update all metadata of this share."""
         return self.manager.update_all_metadata(self, metadata)
-
-    @staticmethod
-    def _validate_common_name(access):
-        if len(access) == 0 or len(access) > 64:
-            exc_str = ('Invalid CN (common name). Must be 1-64 chars long.')
-            raise exceptions.CommandError(exc_str)
-
-    @staticmethod
-    def _validate_username(access):
-        valid_username_re = '[\w\.\-_\`;\'\{\}\[\]\\\\]{4,32}$'
-        username = access
-        if not re.match(valid_username_re, username):
-            exc_str = ('Invalid user or group name. Must be 4-32 characters '
-                       'and consist of alphanumeric characters and '
-                       'special characters ]{.-_\'`;}[\\')
-            raise exceptions.CommandError(exc_str)
-
-    @staticmethod
-    def _validate_ip_range(ip_range):
-        ip_range = ip_range.split('/')
-        exc_str = ('Supported ip format examples:\n'
-                   '\t10.0.0.2, 10.0.0.0/24')
-        if len(ip_range) > 2:
-            raise exceptions.CommandError(exc_str)
-        if len(ip_range) == 2:
-            try:
-                prefix = int(ip_range[1])
-                if prefix < 0 or prefix > 32:
-                    raise ValueError()
-            except ValueError:
-                msg = 'IP prefix should be in range from 0 to 32'
-                raise exceptions.CommandError(msg)
-        ip_range = ip_range[0].split('.')
-        if len(ip_range) != 4:
-            raise exceptions.CommandError(exc_str)
-        for item in ip_range:
-            try:
-                if 0 <= int(item) <= 255:
-                    continue
-                raise ValueError()
-            except ValueError:
-                raise exceptions.CommandError(exc_str)
 
     def reset_state(self, state):
         """Update the share with the provided state."""
@@ -157,7 +115,7 @@ class ShareManager(base.ManagerWithFind):
         """Create a share.
 
         :param share_proto: text - share protocol for new share
-            available values are NFS, CIFS, GlusterFS and HDFS.
+            available values are NFS, CIFS, CephFS, GlusterFS and HDFS.
         :param size: int - size in GiB
         :param snapshot_id: text - ID of the snapshot
         :param name: text - name of new share
@@ -186,27 +144,71 @@ class ShareManager(base.ManagerWithFind):
         }
         return self._create('/shares', {'share': body}, 'share')
 
-    def _do_migrate_share(self, share, host, force_host_copy, action_name):
+    def _do_migrate_start(self, share, host, force_host_copy, notify,
+                          action_name):
         """Migrate share to new host and pool.
 
         :param share: The :class:'share' to migrate
         :param host: The destination host and pool
         :param force_host_copy: Skip driver optimizations
+        :param notify: whether migration completion should be notified
+        :param action_name: action name to be used in request. Changes
+            according to desired microversion.
         """
 
         return self._action(
             action_name, share,
-            {"host": host, "force_host_copy": force_host_copy})
+            {"host": host, "force_host_copy": force_host_copy,
+             "notify": notify})
 
     @api_versions.wraps("2.5", "2.6")
-    def migrate_share(self, share, host, force_host_copy):
-        return self._do_migrate_share(
-            share, host, force_host_copy, "os-migrate_share")
+    def migration_start(self, share, host, force_host_copy):
+        return self._do_migrate_start(
+            share, host, force_host_copy, True, "os-migrate_share")
 
-    @api_versions.wraps("2.7")  # noqa
-    def migrate_share(self, share, host, force_host_copy):
-        return self._do_migrate_share(
-            share, host, force_host_copy, "migrate_share")
+    @api_versions.wraps("2.7", "2.14")  # noqa
+    def migration_start(self, share, host, force_host_copy):
+        return self._do_migrate_start(
+            share, host, force_host_copy, True, "migrate_share")
+
+    @api_versions.wraps("2.15")  # noqa
+    def migration_start(self, share, host, force_host_copy, notify):
+        return self._do_migrate_start(
+            share, host, force_host_copy, notify, "migration_start")
+
+    @api_versions.wraps("2.15")
+    def reset_task_state(self, share, task_state):
+        """Update the provided share with the provided task state.
+
+        :param share: either share object or text with its ID.
+        :param task_state: text with new task state to set for share.
+        """
+        return self._action('reset_task_state', share,
+                            {"task_state": task_state})
+
+    @api_versions.wraps("2.15")
+    def migration_complete(self, share):
+        """Completes migration for a given share.
+
+        :param share: The :class:'share' to complete migration
+        """
+        return self._action('migration_complete', share)
+
+    @api_versions.wraps("2.15")
+    def migration_cancel(self, share):
+        """Attempts to cancel migration for a given share.
+
+        :param share: The :class:'share' to cancel migration
+        """
+        return self._action('migration_cancel', share)
+
+    @api_versions.wraps("2.15")
+    def migration_get_progress(self, share):
+        """Obtains progress of share migration for a given share.
+
+        :param share: The :class:'share' to obtain migration progress
+        """
+        return self._action('migration_get_progress', share)
 
     def _do_manage(self, service_host, protocol, export_path,
                    driver_options=None, share_type=None,
@@ -214,10 +216,10 @@ class ShareManager(base.ManagerWithFind):
                    resource_path="/shares/manage"):
         """Manage some existing share.
 
-        :param service_host: text - host of share service where share is runing
+        :param service_host: text - host where manila share service is running
         :param protocol: text - share protocol that is used
         :param export_path: text - export path of share
-        :param driver_options: dict - custom set of key-values.
+        :param driver_options: dict - custom set of key-values
         :param share_type: text - share type that should be used for share
         :param name: text - name of new share
         :param description: - description for new share
@@ -398,6 +400,91 @@ class ShareManager(base.ManagerWithFind):
     def force_delete(self, share):
         return self._do_force_delete(share, "force_delete")
 
+    @staticmethod
+    def _validate_common_name(access):
+        if len(access) == 0 or len(access) > 64:
+            exc_str = ('Invalid CN (common name). Must be 1-64 chars long.')
+            raise exceptions.CommandError(exc_str)
+
+    @staticmethod
+    def _validate_username(access):
+        valid_username_re = '[\w\.\-_\`;\'\{\}\[\]\\\\]{4,32}$'
+        username = access
+        if not re.match(valid_username_re, username):
+            exc_str = ('Invalid user or group name. Must be 4-32 characters '
+                       'and consist of alphanumeric characters and '
+                       'special characters ]{.-_\'`;}[\\')
+            raise exceptions.CommandError(exc_str)
+
+    @staticmethod
+    def _validate_ip_range(ip_range):
+        ip_range = ip_range.split('/')
+        exc_str = ('Supported ip format examples:\n'
+                   '\t10.0.0.2, 10.0.0.0/24')
+        if len(ip_range) > 2:
+            raise exceptions.CommandError(exc_str)
+        if len(ip_range) == 2:
+            try:
+                prefix = int(ip_range[1])
+                if prefix < 0 or prefix > 32:
+                    raise ValueError()
+            except ValueError:
+                msg = 'IP prefix should be in range from 0 to 32.'
+                raise exceptions.CommandError(msg)
+        ip_range = ip_range[0].split('.')
+        if len(ip_range) != 4:
+            raise exceptions.CommandError(exc_str)
+        for item in ip_range:
+            try:
+                if 0 <= int(item) <= 255:
+                    continue
+                raise ValueError()
+            except ValueError:
+                raise exceptions.CommandError(exc_str)
+
+    @staticmethod
+    def _validate_cephx_id(cephx_id):
+        if not cephx_id:
+            raise exceptions.CommandError(
+                'Ceph IDs may not be empty.')
+
+        # This restriction may be lifted in Ceph in the future:
+        # http://tracker.ceph.com/issues/14626
+        if not set(cephx_id) <= set(string.printable):
+            raise exceptions.CommandError(
+                'Ceph IDs must consist of ASCII printable characters.')
+
+        # Periods are technically permitted, but we restrict them here
+        # to avoid confusion where users are unsure whether they should
+        # include the "client." prefix: otherwise they could accidentally
+        # create "client.client.foobar".
+        if '.' in cephx_id:
+            raise exceptions.CommandError(
+                'Ceph IDs may not contain periods.')
+
+    def _validate_access(self, access_type, access, valid_access_types=None):
+        if not valid_access_types:
+            valid_access_types = ('ip', 'user', 'cert')
+
+        if access_type in valid_access_types:
+            if access_type == 'ip':
+                self._validate_ip_range(access)
+            elif access_type == 'user':
+                self._validate_username(access)
+            elif access_type == 'cert':
+                # 'access' is used as the certificate's CN (common name)
+                # to which access is allowed or denied by the backend.
+                # The standard allows for just about any string in the
+                # common name. The meaning of a string depends on its
+                # interpretation and is limited to 64 characters.
+                self._validate_common_name(access.strip())
+            elif access_type == 'cephx':
+                self._validate_cephx_id(access.strip())
+        else:
+            msg = ('Only following access types are supported: %s' %
+                   ', '.join(valid_access_types))
+            raise exceptions.CommandError(msg)
+
     def _do_allow(self, share, access_type, access, access_level, action_name):
         """Allow access to a share.
 
@@ -414,16 +501,24 @@ class ShareManager(base.ManagerWithFind):
             access_params['access_level'] = access_level
         access = self._action(action_name, share,
                               access_params)[1]["access"]
-
         return access
 
     @api_versions.wraps("1.0", "2.6")
     def allow(self, share, access_type, access, access_level):
+        self._validate_access(access_type, access)
         return self._do_allow(
             share, access_type, access, access_level, "os-allow_access")
 
-    @api_versions.wraps("2.7")  # noqa
+    @api_versions.wraps("2.7", "2.12")  # noqa
     def allow(self, share, access_type, access, access_level):
+        self._validate_access(access_type, access)
+        return self._do_allow(
+            share, access_type, access, access_level, "allow_access")
+
+    @api_versions.wraps("2.13")  # noqa
+    def allow(self, share, access_type, access, access_level):
+        valid_access_types = ('ip', 'user', 'cert', 'cephx')
+        self._validate_access(access_type, access, valid_access_types)
         return self._do_allow(
             share, access_type, access, access_level, "allow_access")
 

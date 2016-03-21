@@ -41,8 +41,8 @@ class TypesTest(utils.TestCase):
 
         self.assertTrue(hasattr(share_type, '_required_extra_specs'))
         self.assertTrue(hasattr(share_type, '_optional_extra_specs'))
-        self.assertTrue(isinstance(share_type._required_extra_specs, dict))
-        self.assertTrue(isinstance(share_type._optional_extra_specs, dict))
+        self.assertIsInstance(share_type._required_extra_specs, dict)
+        self.assertIsInstance(share_type._optional_extra_specs, dict)
         self.assertEqual(
             {'snapshot_support': 'False'}, share_type.get_optional_keys())
 
@@ -134,7 +134,7 @@ class TypesTest(utils.TestCase):
                          '/types/1/extra_specs',
                          {'extra_specs': {'k': 'v'}})
 
-    def test_unsset_keys(self):
+    def test_unset_keys(self):
         t = cs.share_types.get(1)
         t.unset_keys(['k'])
         cs.assert_called('DELETE', '/types/1/extra_specs/k')

@@ -66,6 +66,20 @@ def _find_share(cs, share):
     return apiclient_utils.find_resource(cs.shares, share)
 
 
+def _transform_export_locations_to_string_view(export_locations):
+    export_locations_string_view = ''
+    for el in export_locations:
+        if hasattr(el, '_info'):
+            export_locations_dict = el._info
+        else:
+            export_locations_dict = el
+        for k, v in export_locations_dict.items():
+            export_locations_string_view += '\n%(k)s = %(v)s' % {
+                'k': k, 'v': v}
+    return export_locations_string_view
+
+
+@api_versions.wraps("1.0", "2.8")
 def _print_share(cs, share):
     info = share._info.copy()
     info.pop('links', None)
@@ -96,13 +110,72 @@ def _print_share(cs, share):
     cliutils.print_dict(info)
 
 
+@api_versions.wraps("2.9")  # noqa
+def _print_share(cs, share):
+    info = share._info.copy()
+    info.pop('links', None)
+
+    # NOTE(vponomaryov): remove deprecated single field 'export_location' and
+    # leave only list field 'export_locations'. Also, transform the latter to
+    # text with new line separators to make it pretty in CLI.
+    # It will look like following:
+    # +-------------------+--------------------------------------------+
+    # | Property          | Value                                      |
+    # +-------------------+--------------------------------------------+
+    # | status            | available                                  |
+    # | export_locations  |                                            |
+    # |                   | uuid = FOO-UUID                            |
+    # |                   | path = 5.6.7.8:/foo/export/location/path   |
+    # |                   |                                            |
+    # |                   | uuid = BAR-UUID                            |
+    # |                   | path = 5.6.7.8:/bar/export/location/path   |
+    # |                   |                                            |
+    # | id                | d778d2ee-b6bb-4c5f-9f5d-6f3057d549b1       |
+    # | size              | 1                                          |
+    # | share_proto       | NFS                                        |
+    # +-------------------+--------------------------------------------+
+    if info.get('export_locations'):
+        info['export_locations'] = (
+            _transform_export_locations_to_string_view(
+                info['export_locations']))
+
+    # No need to print both volume_type and share_type to CLI
+    if 'volume_type' in info and 'share_type' in info:
+        info.pop('volume_type', None)
+
+    cliutils.print_dict(info)
+
+
 def _find_share_instance(cs, instance):
     """Get a share instance by ID."""
     return apiclient_utils.find_resource(cs.share_instances, instance)
 
 
+@api_versions.wraps("1.0", "2.8")
 def _print_share_instance(cs, instance):
     info = instance._info.copy()
+    info.pop('links', None)
+    cliutils.print_dict(info)
+
+
+@api_versions.wraps("2.9")  # noqa
+def _print_share_instance(cs, instance):
+    info = instance._info.copy()
+    info.pop('links', None)
+    if info.get('export_locations'):
+        info['export_locations'] = (
+            _transform_export_locations_to_string_view(
+                info['export_locations']))
+    cliutils.print_dict(info)
+
+
+def _find_share_replica(cs, replica):
+    """Get a replica by ID."""
+    return apiclient_utils.find_resource(cs.share_replicas, replica)
+
+
+def _print_share_replica(cs, replica):
+    info = replica._info.copy()
     info.pop('links', None)
     cliutils.print_dict(info)
 
@@ -148,12 +221,12 @@ def _print_share_snapshot(cs, snapshot):
 
 
 def _find_share_network(cs, share_network):
-    "Get a share network by ID or name."
+    """Get a share network by ID or name."""
     return apiclient_utils.find_resource(cs.share_networks, share_network)
 
 
 def _find_security_service(cs, security_service):
-    "Get a security service by ID or name."
+    """Get a security service by ID or name."""
     return apiclient_utils.find_resource(cs.security_services,
                                          security_service)
 
@@ -340,7 +413,7 @@ def do_quota_defaults(cs, args):
     help='Whether force update the quota even if the already used '
          'and reserved exceeds the new quota.')
 def do_quota_update(cs, args):
-    """Update the quotas for a tenant/user."""
+    """Update the quotas for a tenant/user (Admin only)."""
 
     _quota_update(cs.quotas, args.tenant, args)
 
@@ -356,7 +429,7 @@ def do_quota_update(cs, args):
 def do_quota_delete(cs, args):
     """Delete quota for a tenant/user.
 
-    The quota will revert back to default.
+    The quota will revert back to default (Admin only).
     """
     if not args.tenant:
         project_id = cs.keystone_client.project_id
@@ -414,7 +487,7 @@ def do_quota_class_show(cs, args):
     action='single_alias',
     help='New value for the "share_networks" quota.')
 def do_quota_class_update(cs, args):
-    """Update the quotas for a quota class."""
+    """Update the quotas for a quota class (Admin only)."""
 
     _quota_update(cs.quota_classes, args.class_name, args)
 
@@ -448,7 +521,7 @@ def do_rate_limits(cs, args):
     'share_protocol',
     metavar='<share_protocol>',
     type=str,
-    help='Share type (NFS, CIFS, GlusterFS or HDFS).')
+    help='Share type (NFS, CIFS, CephFS, GlusterFS or HDFS).')
 @cliutils.arg(
     'size',
     metavar='<size>',
@@ -507,12 +580,12 @@ def do_rate_limits(cs, args):
     '--cg',
     metavar='<consistency-group>',
     action='single_alias',
-    help='Optional consistency group name or ID in which to create the share. '
-         '(Default=None)',
+    help='Optional consistency group name or ID in which to create the share '
+         '(Experimental, Default=None).',
     default=None)
 @cliutils.service_type('sharev2')
 def do_create(cs, args):
-    """Creates a new share (NFS, CIFS, GlusterFS or HDFS)."""
+    """Creates a new share (NFS, CIFS, CephFS, GlusterFS or HDFS)."""
 
     share_metadata = None
     if args.metadata is not None:
@@ -538,20 +611,135 @@ def do_create(cs, args):
 
 
 @cliutils.arg(
-    'share', metavar='<share>', help='Name or ID of share to migrate.')
-@cliutils.arg('host', metavar='<host#pool>', help='Destination host and pool.')
-@cliutils.arg('--force-host-copy', metavar='<True|False>',
-              choices=['True', 'False'], required=False,
-              help='Enables or disables generic host-based '
-              'force-migration, which bypasses driver '
-              'optimizations. Default=False.',
-              default=False)
+    'share',
+    metavar='<share>',
+    help='Name or ID of share to migrate.')
+@cliutils.arg(
+    'host',
+    metavar='<host#pool>',
+    help='Destination host and pool.')
+@cliutils.arg(
+    '--force-host-copy',
+    '--force_host_copy',
+    metavar='<True|False>',
+    choices=['True', 'False'],
+    required=False,
+    help='Enables or disables generic host-based force-migration, which '
+         'bypasses driver optimizations. Default=False.',
+    default=False)
 @api_versions.experimental_api
-@api_versions.wraps("2.5")
+@api_versions.wraps("2.5", "2.14")
 def do_migrate(cs, args):
-    """Migrates share to a new host."""
+    """(Deprecated) Migrates share to a new host (Admin only, Experimental)."""
     share = _find_share(cs, args.share)
-    share.migrate_share(args.host, args.force_host_copy)
+    share.migration_start(args.host, args.force_host_copy, True)
+
+
+@cliutils.arg(
+    'share',
+    metavar='<share>',
+    help='Name or ID of share to migrate.')
+@cliutils.arg(
+    'host',
+    metavar='<host#pool>',
+    help='Destination host and pool.')
+@cliutils.arg(
+    '--force-host-copy',
+    '--force_host_copy',
+    metavar='<True|False>',
+    choices=['True', 'False'],
+    required=False,
+    help='Enables or disables generic host-based force-migration, which '
+         'bypasses driver optimizations. Default=False.',
+    default=False)
+@cliutils.arg(
+    '--notify',
+    metavar='<True|False>',
+    choices=['True', 'False'],
+    required=False,
+    help='Enables or disables notification of data copying completed. '
+         'Default=True.',
+    default=True)
+@api_versions.experimental_api
+@api_versions.wraps("2.15")
+def do_migration_start(cs, args):
+    """Migrates share to a new host (Admin only, Experimental)."""
+    share = _find_share(cs, args.share)
+    share.migration_start(args.host, args.force_host_copy, args.notify)
+
+
+@cliutils.arg(
+    'share',
+    metavar='<share>',
+    help='Name or ID of share to complete migration.')
+@api_versions.experimental_api
+@api_versions.wraps("2.15")
+def do_migration_complete(cs, args):
+    """Completes migration for a given share (Admin only, Experimental)."""
+    share = _find_share(cs, args.share)
+    share.migration_complete()
+
+
+@cliutils.arg(
+    'share',
+    metavar='<share>',
+    help='Name or ID of share to cancel migration.')
+@api_versions.experimental_api
+@api_versions.wraps("2.15")
+def do_migration_cancel(cs, args):
+    """Cancels migration of a given share when copying
+
+    (Admin only, Experimental).
+    """
+    share = _find_share(cs, args.share)
+    share.migration_cancel()
+
+
+@cliutils.arg(
+    'share',
+    metavar='<share>',
+    help='Name or ID of the share to modify.')
+@cliutils.arg(
+    '--task-state',
+    '--task_state',
+    '--state',
+    metavar='<task_state>',
+    default='migration_error',
+    help=('Indicate which task state to assign the share. Options include '
+          'migration_starting, migration_in_progress, migration_completing, '
+          'migration_success, migration_error, migration_cancelled, '
+          'migration_driver_in_progress, migration_driver_phase1_done, '
+          'data_copying_starting, data_copying_in_progress, '
+          'data_copying_completing, data_copying_completed, '
+          'data_copying_cancelled, data_copying_error. If no value is '
+          'provided, migration_error will be used.'))
+@api_versions.experimental_api
+@api_versions.wraps("2.15")
+def do_reset_task_state(cs, args):
+    """Explicitly update the task state of a share
+
+    (Admin only, Experimental).
+    """
+    share = _find_share(cs, args.share)
+    share.reset_task_state(args.task_state)
+
+
+@cliutils.arg(
+    'share',
+    metavar='<share>',
+    help='Name or ID of the share to get share migration progress '
+         'information.')
+@api_versions.experimental_api
+@api_versions.wraps("2.15")
+def do_migration_get_progress(cs, args):
+    """Gets migration progress of a given share when copying
+
+    (Admin only, Experimental).
+    """
+    share = _find_share(cs, args.share)
+    result = share.migration_get_progress()
+    # NOTE(ganso): result[0] is response code, result[1] is dict body
+    cliutils.print_dict(result[1])
 
 
 @cliutils.arg(
@@ -609,6 +797,51 @@ def do_metadata_update_all(cs, args):
     cliutils.print_dict(metadata, 'Property')
 
 
+@api_versions.wraps("2.9")
+@cliutils.arg(
+    'share',
+    metavar='<share>',
+    help='Name or ID of the share.')
+@cliutils.arg(
+    '--columns',
+    metavar='<columns>',
+    type=str,
+    default=None,
+    help='Comma separated list of columns to be displayed '
+         'e.g. --columns "id,host,status"')
+def do_share_export_location_list(cs, args):
+    """List export locations of a given share."""
+    if args.columns is not None:
+        list_of_keys = _split_columns(columns=args.columns)
+    else:
+        list_of_keys = [
+            'ID',
+            'Path',
+            'Preferred',
+        ]
+    share = _find_share(cs, args.share)
+    export_locations = cs.share_export_locations.list(share)
+    cliutils.print_list(export_locations, list_of_keys)
+
+
+@api_versions.wraps("2.9")
+@cliutils.arg(
+    'share',
+    metavar='<share>',
+    help='Name or ID of the share.')
+@cliutils.arg(
+    'export_location',
+    metavar='<export_location>',
+    help='ID of the share export location.')
+def do_share_export_location_show(cs, args):
+    """Show export location of the share."""
+    share = _find_share(cs, args.share)
+    export_location = cs.share_export_locations.get(
+        share, args.export_location)
+    view_data = export_location._info.copy()
+    cliutils.print_dict(view_data)
+
+
 @cliutils.arg(
     'service_host',
     metavar='<service_host>',
@@ -623,8 +856,8 @@ def do_metadata_update_all(cs, args):
     'export_path',
     metavar='<export_path>',
     type=str,
-    help='Share export path, NFS share such as: 10.0.0.1:/foo_path, '
-         'CIFS share such as: \\\\10.0.0.1\\foo_name_of_cifs_share')
+    help='Share export path, NFS share such as: 10.0.0.1:/example_path, '
+         'CIFS share such as: \\\\10.0.0.1\\example_cifs_share')
 @cliutils.arg(
     '--name',
     metavar='<name>',
@@ -657,7 +890,7 @@ def do_metadata_update_all(cs, args):
     help="Level of visibility for share. Defines whether other tenants are "
          "able to see it or not. Available only for microversion >= 2.8")
 def do_manage(cs, args):
-    """Manage share not handled by Manila."""
+    """Manage share not handled by Manila (Admin only)."""
     driver_options = _extract_key_value_options(args, 'driver_options')
 
     share = cs.shares.manage(
@@ -670,14 +903,81 @@ def do_manage(cs, args):
     _print_share(cs, share)
 
 
+@api_versions.wraps("2.12")
+@cliutils.arg(
+    'share',
+    metavar='<share>',
+    type=str,
+    help='Name or ID of the share.')
+@cliutils.arg(
+    'provider_location',
+    metavar='<provider_location>',
+    type=str,
+    help='Provider location of the snapshot on the backend.')
+@cliutils.arg(
+    '--name',
+    metavar='<name>',
+    help='Optional snapshot name (Default=None).',
+    default=None)
+@cliutils.arg(
+    '--description',
+    metavar='<description>',
+    help='Optional snapshot description (Default=None).',
+    default=None)
+@cliutils.arg(
+    '--driver_options', '--driver-options',
+    type=str,
+    nargs='*',
+    metavar='<key=value>',
+    action='single_alias',
+    help='Optional driver options as key=value pairs (Default=None).',
+    default=None)
+def do_snapshot_manage(cs, args):
+    """Manage share snapshot not handled by Manila (Admin only)."""
+    share_ref = _find_share(cs, args.share)
+
+    driver_options = _extract_key_value_options(args, 'driver_options')
+
+    share_snapshot = cs.share_snapshots.manage(
+        share_ref, args.provider_location,
+        driver_options=driver_options,
+        name=args.name, description=args.description
+    )
+
+    _print_share_snapshot(cs, share_snapshot)
+
+
 @cliutils.arg(
     'share',
     metavar='<share>',
     help='Name or ID of the share(s).')
 def do_unmanage(cs, args):
-    """Unmanage share."""
+    """Unmanage share (Admin only)."""
     share_ref = _find_share(cs, args.share)
     share_ref.unmanage()
+
+
+@api_versions.wraps("2.12")
+@cliutils.arg(
+    'snapshot',
+    metavar='<snapshot>',
+    nargs='+',
+    help='Name or ID of the snapshot(s).')
+def do_snapshot_unmanage(cs, args):
+    """Unmanage one or more share snapshots (Admin only)."""
+    failure_count = 0
+    for snapshot in args.snapshot:
+        try:
+            snapshot_ref = _find_share_snapshot(cs, snapshot)
+            snapshot_ref.unmanage_snapshot()
+        except Exception as e:
+            failure_count += 1
+            print("Unmanage for share snapshot %s failed: %s" % (snapshot, e),
+                  file=sys.stderr)
+
+    if failure_count == len(args.snapshot):
+        raise exceptions.CommandError("Unable to unmanage any of the "
+                                      "specified snapshots.")
 
 
 @cliutils.arg(
@@ -691,8 +991,8 @@ def do_unmanage(cs, args):
     '--cg',
     metavar='<consistency-group>',
     action='single_alias',
-    help='Optional consistency group name or ID which contains the share. '
-         '(Default=None)',
+    help='Optional consistency group name or ID which contains the share '
+         '(Experimental, Default=None).',
     default=None)
 @cliutils.service_type('sharev2')
 def do_delete(cs, args):
@@ -724,7 +1024,7 @@ def do_delete(cs, args):
     nargs='+',
     help='Name or ID of the share(s) to force delete.')
 def do_force_delete(cs, args):
-    """Attempt force-delete of share, regardless of state."""
+    """Attempt force-delete of share, regardless of state (Admin only)."""
     failure_count = 0
     for share in args.share:
         try:
@@ -738,6 +1038,7 @@ def do_force_delete(cs, args):
                                       "specified shares.")
 
 
+@api_versions.wraps("1.0", "2.8")
 @cliutils.arg(
     'share',
     metavar='<share>',
@@ -748,6 +1049,19 @@ def do_show(cs, args):
     _print_share(cs, share)
 
 
+@api_versions.wraps("2.9")  # noqa
+@cliutils.arg(
+    'share',
+    metavar='<share>',
+    help='Name or ID of the NAS share.')
+def do_show(cs, args):
+    """Show details about a NAS share."""
+    share = _find_share(cs, args.share)
+    export_locations = cs.share_export_locations.list(share)
+    share._info['export_locations'] = export_locations
+    _print_share(cs, share)
+
+
 @cliutils.arg(
     'share',
     metavar='<share>',
@@ -755,8 +1069,8 @@ def do_show(cs, args):
 @cliutils.arg(
     'access_type',
     metavar='<access_type>',
-    help='Access rule type (only "ip", "user"(user or group), and "cert" '
-         'are supported).')
+    help='Access rule type (only "ip", "user"(user or group), "cert" or '
+         '"cephx" are supported).')
 @cliutils.arg(
     'access_to',
     metavar='<access_to>',
@@ -769,7 +1083,7 @@ def do_show(cs, args):
     default=None,
     choices=['rw', 'ro'],
     help='Share access level ("rw" and "ro" access levels are supported). '
-         'Defaults to None.')
+         'Defaults to rw.')
 def do_access_allow(cs, args):
     """Allow access to the share."""
     share = _find_share(cs, args.share)
@@ -844,7 +1158,7 @@ def do_access_list(cs, args):
     type=str,
     default=None,
     action='single_alias',
-    help='Filter results by share server ID.')
+    help='Filter results by share server ID (Admin only).')
 @cliutils.arg(
     '--metadata',
     type=str,
@@ -945,7 +1259,8 @@ def do_access_list(cs, args):
     type=str,
     default=None,
     action='single_alias',
-    help='Filter results by consistency group name or ID.')
+    help='Filter results by consistency group name or ID (Experimental, '
+         'Default=None).')
 @cliutils.arg(
     '--columns',
     metavar='<columns>',
@@ -962,8 +1277,9 @@ def do_list(cs, args):
         'Share Type Name', 'Host', 'Availability Zone'
     ]
 
-    if args.columns is not None:
-        list_of_keys = _split_columns(columns=args.columns)
+    columns = args.columns
+    if columns is not None:
+        list_of_keys = _split_columns(columns=columns)
 
     all_tenants = int(os.environ.get("ALL_TENANTS", args.all_tenants))
     empty_obj = type('Empty', (object,), {'id': None})
@@ -1005,6 +1321,17 @@ def do_list(cs, args):
         sort_key=args.sort_key,
         sort_dir=args.sort_dir,
     )
+    # NOTE(vponomaryov): usage of 'export_location' and
+    # 'export_locations' columns may cause scaling issue using API 2.9+ and
+    # when lots of shares are returned.
+    if (shares and columns is not None and 'export_location' in columns and
+            not hasattr(shares[0], 'export_location')):
+        # NOTE(vponomaryov): we will get here only using API 2.9+
+        for share in shares:
+            els_objs = cs.share_export_locations.list(share)
+            els = [el.to_dict()['path'] for el in els_objs]
+            setattr(share, 'export_locations', els)
+            setattr(share, 'export_location', els[0] if els else None)
     cliutils.print_list(shares, list_of_keys)
 
 
@@ -1024,7 +1351,7 @@ def do_list(cs, args):
          'e.g. --columns "id,host,status"')
 @api_versions.wraps("2.3")
 def do_share_instance_list(cs, args):
-    """List share instances."""
+    """List share instances (Admin only)."""
     share = _find_share(cs, args.share_id) if args.share_id else None
 
     list_of_keys = [
@@ -1043,14 +1370,27 @@ def do_share_instance_list(cs, args):
     cliutils.print_list(instances, list_of_keys)
 
 
+@api_versions.wraps("2.3", "2.8")
 @cliutils.arg(
     'instance',
     metavar='<instance>',
     help='Name or ID of the share instance.')
-@api_versions.wraps("2.3")
 def do_share_instance_show(cs, args):
     """Show details about a share instance."""
     instance = _find_share_instance(cs, args.instance)
+    _print_share_instance(cs, instance)
+
+
+@api_versions.wraps("2.9")  # noqa
+@cliutils.arg(
+    'instance',
+    metavar='<instance>',
+    help='Name or ID of the share instance.')
+def do_share_instance_show(cs, args):
+    """Show details about a share instance (Admin only)."""
+    instance = _find_share_instance(cs, args.instance)
+    export_locations = cs.share_instance_export_locations.list(instance)
+    instance._info['export_locations'] = export_locations
     _print_share_instance(cs, instance)
 
 
@@ -1061,7 +1401,7 @@ def do_share_instance_show(cs, args):
     help='Name or ID of the instance(s) to force delete.')
 @api_versions.wraps("2.3")
 def do_share_instance_force_delete(cs, args):
-    """Attempt force-delete of share instance, regardless of state."""
+    """Force-delete the share instance, regardless of state (Admin only)."""
     failure_count = 0
     for instance in args.instance:
         try:
@@ -1088,9 +1428,55 @@ def do_share_instance_force_delete(cs, args):
           'state is provided, available will be used.'))
 @api_versions.wraps("2.3")
 def do_share_instance_reset_state(cs, args):
-    """Explicitly update the state of a share instance."""
+    """Explicitly update the state of a share instance (Admin only)."""
     instance = _find_share_instance(cs, args.instance)
     instance.reset_state(args.state)
+
+
+@api_versions.wraps("2.9")
+@cliutils.arg(
+    'instance',
+    metavar='<instance>',
+    help='Name or ID of the share instance.')
+@cliutils.arg(
+    '--columns',
+    metavar='<columns>',
+    type=str,
+    default=None,
+    help='Comma separated list of columns to be displayed '
+         'e.g. --columns "id,host,status"')
+def do_share_instance_export_location_list(cs, args):
+    """List export locations of a given share instance."""
+    if args.columns is not None:
+        list_of_keys = _split_columns(columns=args.columns)
+    else:
+        list_of_keys = [
+            'ID',
+            'Path',
+            'Is Admin only',
+            'Preferred',
+        ]
+    instance = _find_share_instance(cs, args.instance)
+    export_locations = cs.share_instance_export_locations.list(instance)
+    cliutils.print_list(export_locations, list_of_keys)
+
+
+@api_versions.wraps("2.9")
+@cliutils.arg(
+    'instance',
+    metavar='<instance>',
+    help='Name or ID of the share instance.')
+@cliutils.arg(
+    'export_location',
+    metavar='<export_location>',
+    help='ID of the share instance export location.')
+def do_share_instance_export_location_show(cs, args):
+    """Show export location for the share instance."""
+    instance = _find_share_instance(cs, args.instance)
+    export_location = cs.share_instance_export_locations.get(
+        instance, args.export_location)
+    view_data = export_location._info.copy()
+    cliutils.print_dict(view_data)
 
 
 @cliutils.arg(
@@ -1320,7 +1706,7 @@ def do_snapshot_delete(cs, args):
     metavar='<snapshot>',
     help='Name or ID of the snapshot to force delete.')
 def do_snapshot_force_delete(cs, args):
-    """Attempt force-delete of snapshot, regardless of state."""
+    """Attempt force-delete of snapshot, regardless of state (Admin only)."""
     snapshot = _find_share_snapshot(cs, args.snapshot)
     snapshot.force_delete()
 
@@ -1338,7 +1724,7 @@ def do_snapshot_force_delete(cs, args):
           'error_deleting. If no state is provided, '
           'available will be used.'))
 def do_snapshot_reset_state(cs, args):
-    """Explicitly update the state of a snapshot."""
+    """Explicitly update the state of a snapshot (Admin only)."""
     snapshot = _find_share_snapshot(cs, args.snapshot)
     snapshot.reset_state(args.state)
 
@@ -1355,7 +1741,7 @@ def do_snapshot_reset_state(cs, args):
           'available, error, creating, deleting, error_deleting. If no '
           'state is provided, available will be used.'))
 def do_reset_state(cs, args):
-    """Explicitly update the state of a share."""
+    """Explicitly update the state of a share (Admin only)."""
     share = _find_share(cs, args.share)
     share.reset_state(args.state)
 
@@ -1942,7 +2328,7 @@ def do_security_service_delete(cs, args):
     help='Comma separated list of columns to be displayed '
          'e.g. --columns "id,host,status"')
 def do_share_server_list(cs, args):
-    """List all share servers."""
+    """List all share servers (Admin only)."""
     search_opts = {
         "host": args.host,
         "share_network": args.share_network,
@@ -1971,7 +2357,7 @@ def do_share_server_list(cs, args):
     type=str,
     help='ID of share server.')
 def do_share_server_show(cs, args):
-    """Show share server info."""
+    """Show share server info (Admin only)."""
     share_server = cs.share_servers.get(args.id)
     # All 'backend_details' data already present as separated strings,
     # so remove big dict from view.
@@ -1986,7 +2372,7 @@ def do_share_server_show(cs, args):
     type=str,
     help='ID of share server.')
 def do_share_server_details(cs, args):
-    """Show share server details."""
+    """Show share server details (Admin only)."""
     details = cs.share_servers.details(args.id)
     cliutils.print_dict(details._info)
 
@@ -1997,7 +2383,7 @@ def do_share_server_details(cs, args):
     type=str,
     help='ID of share server.')
 def do_share_server_delete(cs, args):
-    """Delete share server."""
+    """Delete share server (Admin only)."""
     cs.share_servers.delete(args.id)
 
 
@@ -2034,7 +2420,7 @@ def do_share_server_delete(cs, args):
     help='Comma separated list of columns to be displayed '
          'e.g. --columns "id,host"')
 def do_service_list(cs, args):
-    """List all services."""
+    """List all services (Admin only)."""
     search_opts = {
         'status': args.status,
         'host': args.host,
@@ -2054,13 +2440,13 @@ def do_service_list(cs, args):
 @cliutils.arg(
     'host',
     metavar='<hostname>',
-    help="Host name as 'foo_host@bar_backend'.")
+    help="Host name as 'example_host@example_backend'.")
 @cliutils.arg(
     'binary',
     metavar='<binary>',
     help="Service binary, could be 'manila-share' or 'manila-scheduler'.")
 def do_service_enable(cs, args):
-    """Enables 'manila-share' or 'manila-scheduler' services."""
+    """Enables 'manila-share' or 'manila-scheduler' services (Admin only)."""
     columns = ("Host", "Binary", "Enabled")
     result = cs.services.enable(args.host, args.binary)
     result.enabled = not result.disabled
@@ -2070,13 +2456,13 @@ def do_service_enable(cs, args):
 @cliutils.arg(
     'host',
     metavar='<hostname>',
-    help="Host name as 'foo_host@bar_backend'.")
+    help="Host name as 'example_host@example_backend'.")
 @cliutils.arg(
     'binary',
     metavar='<binary>',
     help="Service binary, could be 'manila-share' or 'manila-scheduler'.")
 def do_service_disable(cs, args):
-    """Disables 'manila-share' or 'manila-scheduler' services."""
+    """Disables 'manila-share' or 'manila-scheduler' services (Admin only)."""
     columns = ("Host", "Binary", "Enabled")
     result = cs.services.disable(args.host, args.binary)
     result.enabled = not result.disabled
@@ -2248,7 +2634,7 @@ def do_extra_specs_list(cs, args):
     action='single_alias',
     help="Make type accessible to the public (default true).")
 def do_type_create(cs, args):
-    """Create a new share type."""
+    """Create a new share type (Admin only)."""
     kwargs = {
         "name": args.name,
         "is_public": strutils.bool_from_string(args.is_public, default=True),
@@ -2279,7 +2665,7 @@ def do_type_create(cs, args):
     metavar='<id>',
     help="Name or ID of the share type to delete.")
 def do_type_delete(cs, args):
-    """Delete a specific share type."""
+    """Delete a specific share type (Admin only)."""
     share_type = _find_share_type(cs, args.id)
     cs.share_types.delete(share_type)
 
@@ -2300,7 +2686,7 @@ def do_type_delete(cs, args):
     default=None,
     help='Extra_specs to set or unset (key is only necessary on unset).')
 def do_type_key(cs, args):
-    """Set or unset extra_spec for a share type."""
+    """Set or unset extra_spec for a share type (Admin only)."""
     stype = _find_share_type(cs, args.stype)
 
     if args.metadata is not None:
@@ -2358,7 +2744,7 @@ def do_pool_list(cs, args):
     metavar='<share_type>',
     help="Filter results by share type name or ID.")
 def do_type_access_list(cs, args):
-    """Print access information about the given share type."""
+    """Print access information about the given share type (Admin only)."""
     share_type = _find_share_type(cs, args.share_type)
     if share_type.is_public:
         raise exceptions.CommandError("Forbidden to get access list "
@@ -2379,7 +2765,7 @@ def do_type_access_list(cs, args):
     metavar='<project_id>',
     help='Project ID to add share type access for.')
 def do_type_access_add(cs, args):
-    """Adds share type access for the given project."""
+    """Adds share type access for the given project (Admin only)."""
     vtype = _find_share_type(cs, args.share_type)
     cs.share_type_access.add_project_access(vtype, args.project_id)
 
@@ -2394,7 +2780,7 @@ def do_type_access_add(cs, args):
     metavar='<project_id>',
     help='Project ID to remove share type access for.')
 def do_type_access_remove(cs, args):
-    """Removes share type access for the given project."""
+    """Removes share type access for the given project (Admin only)."""
     vtype = _find_share_type(cs, args.share_type)
     cs.share_type_access.remove_project_access(
         vtype, args.project_id)
@@ -2460,7 +2846,7 @@ def do_shrink(cs, args):
 @cliutils.service_type('sharev2')
 @api_versions.experimental_api
 def do_cg_create(cs, args):
-    """Creates a new consistency group."""
+    """Creates a new consistency group (Experimental)."""
 
     share_types = []
     if args.share_types:
@@ -2517,7 +2903,7 @@ def do_cg_create(cs, args):
 @cliutils.service_type('sharev2')
 @api_versions.experimental_api
 def do_cg_list(cs, args):
-    """List consistency groups with filters."""
+    """List consistency groups with filters (Experimental)."""
     list_of_keys = [
         'id', 'name', 'description', 'status',
     ]
@@ -2545,7 +2931,7 @@ def do_cg_list(cs, args):
 @cliutils.service_type('sharev2')
 @api_versions.experimental_api
 def do_cg_show(cs, args):
-    """Show details about a consistency group."""
+    """Show details about a consistency group (Experimental)."""
     consistency_group = _find_consistency_group(cs, args.consistency_group)
     _print_consistency_group(cs, consistency_group)
 
@@ -2567,7 +2953,7 @@ def do_cg_show(cs, args):
 @cliutils.service_type('sharev2')
 @api_versions.experimental_api
 def do_cg_update(cs, args):
-    """Update a consistency group."""
+    """Update a consistency group (Experimental)."""
     kwargs = {}
 
     if args.name is not None:
@@ -2590,11 +2976,12 @@ def do_cg_update(cs, args):
     '--force',
     action='store_true',
     default=False,
-    help='Attempt to force delete the consistency group (Default=False).')
+    help='Attempt to force delete the consistency group (Default=False)'
+         ' (Admin only).')
 @cliutils.service_type('sharev2')
 @api_versions.experimental_api
 def do_cg_delete(cs, args):
-    """Remove one or more consistency groups."""
+    """Remove one or more consistency groups (Experimental)."""
     failure_count = 0
     kwargs = {}
 
@@ -2630,7 +3017,10 @@ def do_cg_delete(cs, args):
 @cliutils.service_type('sharev2')
 @api_versions.experimental_api
 def do_cg_reset_state(cs, args):
-    """Explicitly update the state of a consistency group."""
+    """Explicitly update the state of a consistency group
+
+    (Admin only, Experimental).
+    """
     cg = _find_consistency_group(cs, args.consistency_group)
     cs.consistency_groups.reset_state(cg, args.state)
 
@@ -2652,7 +3042,7 @@ def do_cg_reset_state(cs, args):
 @cliutils.service_type('sharev2')
 @api_versions.experimental_api
 def do_cg_snapshot_create(cs, args):
-    """Creates a new consistency group snapshot."""
+    """Creates a new consistency group snapshot (Experimental)."""
 
     kwargs = {'name': args.name, 'description': args.description}
 
@@ -2708,7 +3098,7 @@ def _split_columns(columns, title=True):
 @cliutils.service_type('sharev2')
 @api_versions.experimental_api
 def do_cg_snapshot_list(cs, args):
-    """List consistency group snapshots with filters."""
+    """List consistency group snapshots with filters (Experimental)."""
     list_of_keys = [
         'id', 'name', 'description', 'status',
     ]
@@ -2735,7 +3125,7 @@ def do_cg_snapshot_list(cs, args):
 @cliutils.service_type('sharev2')
 @api_versions.experimental_api
 def do_cg_snapshot_show(cs, args):
-    """Show details about a consistency group snapshot."""
+    """Show details about a consistency group snapshot (Experimental)."""
     cg_snapshot = _find_cg_snapshot(cs, args.cg_snapshot)
     _print_cg_snapshot(cs, cg_snapshot)
 
@@ -2755,7 +3145,10 @@ def do_cg_snapshot_show(cs, args):
 @cliutils.service_type('sharev2')
 @api_versions.experimental_api
 def do_cg_snapshot_reset_state(cs, args):
-    """Explicitly update the state of a consistency group."""
+    """Explicitly update the state of a consistency group
+
+    (Admin only, Experimental).
+    """
     cg = _find_cg_snapshot(cs, args.cg_snapshot)
     cs.cg_snapshots.reset_state(cg, args.state)
 
@@ -2778,7 +3171,7 @@ def do_cg_snapshot_reset_state(cs, args):
 @cliutils.service_type('sharev2')
 @api_versions.experimental_api
 def do_cg_snapshot_members(cs, args):
-    """Get member details for a consistency group snapshot."""
+    """Get member details for a consistency group snapshot (Experimental)."""
     cg_snapshot = _find_cg_snapshot(cs, args.cg_snapshot)
 
     search_opts = {
@@ -2820,7 +3213,7 @@ def do_cg_snapshot_members(cs, args):
 @cliutils.service_type('sharev2')
 @api_versions.experimental_api
 def do_cg_snapshot_update(cs, args):
-    """Update a consistency group snapshot."""
+    """Update a consistency group snapshot (Experimental)."""
     kwargs = {}
 
     if args.name is not None:
@@ -2843,11 +3236,12 @@ def do_cg_snapshot_update(cs, args):
     '--force',
     action='store_true',
     default=False,
-    help='Attempt to force delete the cg snapshot(s) (Default=False).')
+    help='Attempt to force delete the cg snapshot(s) (Default=False)'
+         ' (Admin only).')
 @cliutils.service_type('sharev2')
 @api_versions.experimental_api
 def do_cg_snapshot_delete(cs, args):
-    """Remove one or more consistency group snapshots."""
+    """Remove one or more consistency group snapshots (Experimental)."""
     failure_count = 0
     kwargs = {}
 
@@ -2867,3 +3261,187 @@ def do_cg_snapshot_delete(cs, args):
     if failure_count == len(args.cg_snapshot):
         raise exceptions.CommandError("Unable to delete any of the specified "
                                       "consistency group snapshots.")
+
+
+@cliutils.arg(
+    '--share-id',
+    '--share_id',
+    '--si',  # alias
+    metavar='<share_id>',
+    default=None,
+    action='single_alias',
+    help='List replicas belonging to share.')
+@api_versions.wraps("2.11")
+@api_versions.experimental_api
+def do_share_replica_list(cs, args):
+    """List share replicas (Experimental)."""
+    share = _find_share(cs, args.share_id) if args.share_id else None
+
+    list_of_keys = [
+        'ID',
+        'Status',
+        'Replica State',
+        'Share ID',
+        'Host',
+        'Availability Zone',
+        'Updated At',
+    ]
+    if share:
+        replicas = cs.share_replicas.list(share)
+    else:
+        replicas = cs.share_replicas.list()
+
+    cliutils.print_list(replicas, list_of_keys)
+
+
+@cliutils.arg(
+    'share',
+    metavar='<share>',
+    help='Name or ID of the share to replicate.')
+@cliutils.arg(
+    '--availability-zone',
+    '--availability_zone',
+    '--az',
+    default=None,
+    action='single_alias',
+    metavar='<availability-zone>',
+    help='Optional Availability zone in which replica should be created.')
+@cliutils.arg(
+    '--share-network',
+    '--share_network',
+    metavar='<network-info>',
+    default=None,
+    help='Optional network info ID or name.')
+@api_versions.wraps("2.11")
+@api_versions.experimental_api
+def do_share_replica_create(cs, args):
+    """Create a share replica (Experimental)."""
+    share = _find_share(cs, args.share)
+
+    share_network = None
+    if args.share_network:
+        share_network = _find_share_network(cs, args.share_network)
+
+    replica = cs.share_replicas.create(share,
+                                       args.availability_zone,
+                                       share_network)
+    _print_share_replica(cs, replica)
+
+
+@cliutils.arg(
+    'replica',
+    metavar='<replica>',
+    help='ID of the share replica.')
+@api_versions.wraps("2.11")
+@api_versions.experimental_api
+def do_share_replica_show(cs, args):
+    """Show details about a replica (Experimental)."""
+
+    replica = cs.share_replicas.get(args.replica)
+    _print_share_replica(cs, replica)
+
+
+@cliutils.arg(
+    'replica',
+    metavar='<replica>',
+    nargs='+',
+    help='ID of the share replica.')
+@cliutils.arg(
+    '--force',
+    action='store_true',
+    default=False,
+    help='Attempt to force deletion of a replica on its backend. Using '
+         'this option will purge the replica from Manila even if it '
+         'is not cleaned up on the backend. Defaults to False.')
+@api_versions.wraps("2.11")
+@api_versions.experimental_api
+def do_share_replica_delete(cs, args):
+    """Remove one or more share replicas (Experimental)."""
+    failure_count = 0
+    kwargs = {}
+
+    if args.force is not None:
+        kwargs['force'] = args.force
+
+    for replica in args.replica:
+        try:
+            replica_ref = _find_share_replica(cs, replica)
+            cs.share_replicas.delete(replica_ref, **kwargs)
+        except Exception as e:
+            failure_count += 1
+            print("Delete for share replica %s failed: %s" % (replica, e),
+                  file=sys.stderr)
+
+    if failure_count == len(args.replica):
+        raise exceptions.CommandError("Unable to delete any of the specified "
+                                      "replicas.")
+
+
+@cliutils.arg(
+    'replica',
+    metavar='<replica>',
+    help='ID of the share replica.')
+@api_versions.wraps("2.11")
+@api_versions.experimental_api
+def do_share_replica_promote(cs, args):
+    """Promote specified replica to 'active' replica_state (Experimental)."""
+    replica = _find_share_replica(cs, args.replica)
+    cs.share_replicas.promote(replica)
+
+
+@cliutils.arg(
+    'replica',
+    metavar='<replica>',
+    help='ID of the share replica to modify.')
+@cliutils.arg(
+    '--state',
+    metavar='<state>',
+    default='available',
+    help=('Indicate which state to assign the replica. Options include '
+          'available, error, creating, deleting, error_deleting. If no '
+          'state is provided, available will be used.'))
+@api_versions.wraps("2.11")
+@api_versions.experimental_api
+def do_share_replica_reset_state(cs, args):
+    """Explicitly update the 'status' of a share replica (Experimental)."""
+    replica = _find_share_replica(cs, args.replica)
+    cs.share_replicas.reset_state(replica, args.state)
+
+
+@cliutils.arg(
+    'replica',
+    metavar='<replica>',
+    help='ID of the share replica to modify.')
+@cliutils.arg(
+    '--replica-state',
+    '--replica_state',
+    '--state',  # alias for user sanity
+    metavar='<replica_state>',
+    default='out_of_sync',
+    help=('Indicate which replica_state to assign the replica. Options '
+          'include in_sync, out_of_sync, active, error. If no '
+          'state is provided, out_of_sync will be used.'))
+@api_versions.wraps("2.11")
+@api_versions.experimental_api
+def do_share_replica_reset_replica_state(cs, args):
+    """Explicitly update the 'replica_state' of a share replica
+
+    (Experimental).
+    """
+    replica = _find_share_replica(cs, args.replica)
+    cs.share_replicas.reset_replica_state(replica, args.replica_state)
+
+
+@cliutils.arg(
+    'replica',
+    metavar='<replica>',
+    help='ID of the share replica to resync.')
+@api_versions.wraps("2.11")
+@api_versions.experimental_api
+def do_share_replica_resync(cs, args):
+    """Attempt to update the share replica with its 'active' mirror
+
+     (Experimental).
+     """
+    replica = _find_share_replica(cs, args.replica)
+    cs.share_replicas.resync(replica)

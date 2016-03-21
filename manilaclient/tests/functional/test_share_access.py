@@ -72,6 +72,7 @@ class ShareAccessReadWriteBase(base.BaseTestCase):
         access = self.user_client.access_allow(
             self.share['id'], access_type, self.access_to[access_type].pop(),
             self.access_level, microversion=microversion)
+
         return access
 
     @ddt.data("1.0", "2.0", "2.6", "2.7")

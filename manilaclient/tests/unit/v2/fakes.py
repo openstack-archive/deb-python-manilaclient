@@ -42,6 +42,17 @@ fake_share_instance = {
 }
 
 
+def get_fake_export_location():
+    return {
+        'uuid': 'foo_el_uuid',
+        'path': '/foo/el/path',
+        'share_instance_id': 'foo_share_instance_id',
+        'is_admin_only': False,
+        'created_at': '2015-12-17T13:14:15Z',
+        'updated_at': '2015-12-17T14:15:16Z',
+    }
+
+
 class FakeHTTPClient(fakes.FakeHTTPClient):
 
     def get_(self, **kw):
@@ -207,9 +218,23 @@ class FakeHTTPClient(fakes.FakeHTTPClient):
                 'reset_status', body.get('os-reset_status'))
         elif action in ('force_delete', 'os-force_delete'):
             assert body[action] is None
+        elif action in ('unmanage', ):
+            assert body[action] is None
         else:
             raise AssertionError("Unexpected action: %s" % action)
         return (resp, {}, _body)
+
+    def post_snapshots_manage(self, body, **kw):
+        _body = {'snapshot': {'id': 'fake'}}
+        resp = 202
+
+        if not ('share_id' in body['snapshot']
+                and 'provider_location' in body['snapshot']
+                and 'driver_options' in body['snapshot']):
+            resp = 422
+
+        result = (resp, {}, _body)
+        return result
 
     def _share_instances(self):
         instances = {
@@ -221,6 +246,24 @@ class FakeHTTPClient(fakes.FakeHTTPClient):
 
     def get_share_instances(self, **kw):
         return self._share_instances()
+
+    def get_share_instances_1234_export_locations(self, **kw):
+        export_locations = {
+            'export_locations': [
+                get_fake_export_location(),
+            ]
+        }
+        return (200, {}, export_locations)
+
+    get_shares_1234_export_locations = (
+        get_share_instances_1234_export_locations)
+
+    def get_share_instances_1234_export_locations_fake_el_uuid(self, **kw):
+        export_location = {'export_location': get_fake_export_location()}
+        return (200, {}, export_location)
+
+    get_shares_1234_export_locations_fake_el_uuid = (
+        get_share_instances_1234_export_locations_fake_el_uuid)
 
     def get_shares_fake_instances(self, **kw):
         return self._share_instances()
@@ -548,6 +591,52 @@ class FakeHTTPClient(fakes.FakeHTTPClient):
                 'name': 'cust_snapshot',
             }
         })
+
+    fake_share_replica = {
+        "id": "5678",
+        "share_id": "1234",
+        "availability_zone": "nova",
+        "share_network_id": None,
+        "export_locations": [],
+        "share_server_id": None,
+        "host": "",
+        "status": "error",
+        "replica_state": "error",
+        "created_at": "2015-10-05T18:21:33.000000",
+        "export_location": None,
+    }
+
+    def delete_share_replicas_1234(self, **kw):
+        return (202, {}, None)
+
+    def get_share_replicas_detail(self, **kw):
+        replicas = {
+            'share_replicas': [
+                self.fake_share_replica,
+            ]
+        }
+        return (200, {}, replicas)
+
+    def get_share_replicas_5678(self, **kw):
+        replicas = {'share_replica': self.fake_share_replica}
+        return (200, {}, replicas)
+
+    def post_share_replicas(self, **kw):
+        return (202, {}, {'share_replica': self.fake_share_replica})
+
+    def post_share_replicas_1234_action(self, body, **kw):
+        _body = None
+        resp = 202
+        assert len(list(body)) == 1
+        action = list(body)[0]
+        if action in ('reset_status', 'reset_replica_state'):
+            attr = action.split('reset_')[1]
+            assert attr in body.get(action)
+        elif action in ('force_delete', 'resync', 'promote'):
+            assert body[action] is None
+        else:
+            raise AssertionError("Unexpected share action: %s" % action)
+        return (resp, {}, _body)
 
     #
     # Set/Unset metadata

@@ -40,65 +40,19 @@ class SharesTest(utils.TestCase):
         self.share = shares.Share(None, {'id': 1})
         self.share.manager = mock.Mock()
 
-    def test_share_allow_access_cert(self):
-        access_type = 'cert'
-        access_to = 'client.example.com'
-        access_level = None
+    def test_share_allow_access(self):
+        access_level = 'fake_level'
+        access_to = 'fake_credential'
+        access_type = 'fake_type'
 
         self.share.allow(access_type, access_to, access_level)
 
-        self.assertTrue(self.share.manager.allow.called)
-
-    def test_share_allow_access_cert_error_gt64(self):
-        access_type = 'cert'
-        access_to = 'x' * 65
-        access_level = None
-
-        self.assertRaises(exceptions.CommandError, self.share.allow,
-                          access_type, access_to, access_level)
-        self.assertFalse(self.share.manager.allow.called)
-
-    def test_share_allow_access_cert_error_whitespace(self):
-        access_type = 'cert'
-        access_to = ' '
-        access_level = None
-
-        self.assertRaises(exceptions.CommandError, self.share.allow,
-                          access_type, access_to, access_level)
-        self.assertFalse(self.share.manager.allow.called)
-
-    def test_share_allow_access_cert_error_zero(self):
-        access_type = 'cert'
-        access_to = ''
-        access_level = None
-
-        self.assertRaises(exceptions.CommandError, self.share.allow,
-                          access_type, access_to, access_level)
-        self.assertFalse(self.share.manager.allow.called)
-
-    @ddt.data(
-        'Administrator',
-        'MYDOMAIN\Administrator',
-        'fake\\]{.-_\'`;}[',
-        '1' * 4,
-        '1' * 32)
-    def test_share_allow_access_user(self, user):
-        self.share.allow('user', user, None)
-        self.assertTrue(self.share.manager.allow.called)
-
-    @ddt.data(
-        '',
-        'abc',
-        'root^',
-        '1' * 33)
-    def test_share_allow_access_user_invalid(self, user):
-        self.assertRaises(
-            exceptions.CommandError, self.share.allow, 'user', user, None)
-        self.assertFalse(self.share.manager.allow.called)
+        self.share.manager.allow.assert_called_once_with(
+            self.share, access_type, access_to, access_level)
 
     # Testcases for class ShareManager
 
-    @ddt.data('nfs', 'cifs', 'glusterfs', 'hdfs')
+    @ddt.data('nfs', 'cifs', 'cephfs', 'glusterfs', 'hdfs')
     def test_create_share_with_protocol(self, protocol):
         expected = {
             'size': 1,
@@ -362,29 +316,98 @@ class SharesTest(utils.TestCase):
         self.assertRaises(ValueError, cs.shares.list, sort_key='fake')
 
     @ddt.data(
-        ("2.6", "os-allow_access"),
-        ("2.7", "allow_access"),
+        {'access_to': '127.0.0.1', 'access_type': 'ip',
+         'action_name': 'os-allow_access', 'microversion': '2.0'},
+        {'access_to': '1' * 4, 'access_type': 'user',
+         'action_name': 'os-allow_access', 'microversion': '2.0'},
+        {'access_to': '1' * 32, 'access_type': 'user',
+         'action_name': 'os-allow_access', 'microversion': '2.0'},
+        {'access_to': 'fake\\]{.-_\'`;}[', 'access_type': 'user',
+         'action_name': 'os-allow_access', 'microversion': '2.0'},
+        {'access_to': 'MYDOMAIN\\Administrator', 'access_type': 'user',
+         'action_name': 'os-allow_access', 'microversion': '2.0'},
+        {'access_to': 'x', 'access_type': 'cert',
+         'action_name': 'os-allow_access', 'microversion': '2.0'},
+        {'access_to': 'x' * 64, 'access_type': 'cert',
+         'action_name': 'os-allow_access', 'microversion': '2.0'},
+        {'access_to': 'tenant.example.com', 'access_type': 'cert',
+         'action_name': 'os-allow_access', 'microversion': '2.0'},
+        {'access_to': '127.0.0.1', 'access_type': 'ip',
+         'action_name': 'allow_access', 'microversion': '2.7'},
+        {'access_to': 'alice', 'access_type': 'cephx',
+         'action_name': 'allow_access', 'microversion': '2.13'},
+        {'access_to': 'alice_bob', 'access_type': 'cephx',
+         'action_name': 'allow_access', 'microversion': '2.13'},
+        {'access_to': 'alice bob', 'access_type': 'cephx',
+         'action_name': 'allow_access', 'microversion': '2.13'},
     )
     @ddt.unpack
-    def test_allow_access_to_share(self, microversion, action_name):
-        access_level = "fake_access_level"
-        access_to = "fake_access_to"
-        access_type = "fake_access_type"
-        share = "fake_share"
-        access = ("foo", {"access": "bar"})
+    def test_allow_access_to_share(self, access_to, access_type,
+                                   action_name, microversion):
+        access = ('foo', {'access': 'bar'})
+        access_level = 'fake_access_level'
+        share = 'fake_share'
         version = api_versions.APIVersion(microversion)
         mock_microversion = mock.Mock(api_version=version)
         manager = shares.ShareManager(api=mock_microversion)
 
-        with mock.patch.object(manager, "_action",
+        with mock.patch.object(manager, '_action',
                                mock.Mock(return_value=access)):
             result = manager.allow(share, access_type, access_to, access_level)
 
             manager._action.assert_called_once_with(
-                action_name, share, {"access_level": access_level,
-                                     "access_type": access_type,
-                                     "access_to": access_to})
-            self.assertEqual("bar", result)
+                action_name, share, {'access_level': access_level,
+                                     'access_type': access_type,
+                                     'access_to': access_to})
+            self.assertEqual('bar', result)
+
+    @ddt.data(
+        {'access_to': 'localhost', 'access_type': 'ip',
+         'microversion': '2.0'},
+        {'access_to': '127.0.0.*', 'access_type': 'ip',
+         'microversion': '2.0'},
+        {'access_to': '127.0.0.0/33', 'access_type': 'ip',
+         'microversion': '2.0'},
+        {'access_to': '127.0.0.256', 'access_type': 'ip',
+         'microversion': '2.0'},
+        {'access_to': '1', 'access_type': 'user',
+         'microversion': '2.0'},
+        {'access_to': '1' * 3, 'access_type': 'user',
+         'microversion': '2.0'},
+        {'access_to': '1' * 33, 'access_type': 'user',
+         'microversion': '2.0'},
+        {'access_to': 'root^', 'access_type': 'user',
+         'microversion': '2.0'},
+        {'access_to': '', 'access_type': 'cert',
+         'microversion': '2.0'},
+        {'access_to': ' ', 'access_type': 'cert',
+         'microversion': '2.0'},
+        {'access_to': 'x' * 65, 'access_type': 'cert',
+         'microversion': '2.0'},
+        {'access_to': 'alice', 'access_type': 'cephx',
+         'microversion': '2.0'},
+        {'access_to': '', 'access_type': 'cephx',
+         'microversion': '2.13'},
+        {'access_to': u"bj\u00F6rn", 'access_type': 'cephx',
+         'microversion': '2.13'},
+    )
+    @ddt.unpack
+    def test_allow_access_to_share_error_invalid_access(self, access_to,
+                                                        access_type,
+                                                        microversion):
+        access = ('foo', {'access': 'bar'})
+        access_level = 'fake_access_level'
+        share = 'fake_share'
+        version = api_versions.APIVersion(microversion)
+        mock_microversion = mock.Mock(api_version=version)
+        manager = shares.ShareManager(api=mock_microversion)
+
+        with mock.patch.object(manager, '_action',
+                               mock.Mock(return_value=access)):
+            self.assertRaises(exceptions.CommandError, manager.allow,
+                              share, access_type, access_to, access_level)
+
+            manager._action.assert_not_called()
 
     @ddt.data(
         ("2.6", "os-deny_access"),
@@ -501,9 +524,11 @@ class SharesTest(utils.TestCase):
     @ddt.data(
         ("2.6", "os-migrate_share"),
         ("2.7", "migrate_share"),
+        ("2.14", "migrate_share"),
+        ("2.15", "migration_start"),
     )
     @ddt.unpack
-    def test_migrate_share(self, microversion, action_name):
+    def test_migration_start(self, microversion, action_name):
         share = "fake_share"
         host = "fake_host"
         force_host_copy = "fake_force_host_copy"
@@ -513,9 +538,71 @@ class SharesTest(utils.TestCase):
 
         with mock.patch.object(manager, "_action",
                                mock.Mock(return_value="fake")):
-            result = manager.migrate_share(share, host, force_host_copy)
+            if version < api_versions.APIVersion('2.15'):
+                result = manager.migration_start(share, host, force_host_copy)
+            else:
+                result = manager.migration_start(share, host, force_host_copy,
+                                                 True)
 
             manager._action.assert_called_once_with(
                 action_name, share,
-                {"host": host, "force_host_copy": force_host_copy})
+                {"host": host, "force_host_copy": force_host_copy,
+                 "notify": True})
+            self.assertEqual("fake", result)
+
+    def test_migration_complete(self):
+        share = "fake_share"
+        version = api_versions.APIVersion("2.15")
+        mock_microversion = mock.Mock(api_version=version)
+        manager = shares.ShareManager(api=mock_microversion)
+
+        with mock.patch.object(manager, "_action",
+                               mock.Mock(return_value="fake")):
+            result = manager.migration_complete(share)
+
+            manager._action.assert_called_once_with(
+                "migration_complete", share)
+            self.assertEqual("fake", result)
+
+    def test_migration_get_progress(self):
+        share = "fake_share"
+        version = api_versions.APIVersion("2.15")
+        mock_microversion = mock.Mock(api_version=version)
+        manager = shares.ShareManager(api=mock_microversion)
+
+        with mock.patch.object(manager, "_action",
+                               mock.Mock(return_value="fake")):
+            result = manager.migration_get_progress(share)
+
+            manager._action.assert_called_once_with(
+                "migration_get_progress", share)
+            self.assertEqual("fake", result)
+
+    def test_reset_task_state(self):
+        share = "fake_share"
+        state = "fake_state"
+        version = api_versions.APIVersion("2.15")
+        mock_microversion = mock.Mock(api_version=version)
+        manager = shares.ShareManager(api=mock_microversion)
+
+        with mock.patch.object(manager, "_action",
+                               mock.Mock(return_value="fake")):
+            result = manager.reset_task_state(share, state)
+
+            manager._action.assert_called_once_with(
+                "reset_task_state", share, {'task_state': state})
+            self.assertEqual("fake", result)
+
+    def test_migration_cancel(self):
+        share = "fake_share"
+        version = api_versions.APIVersion("2.15")
+        mock_microversion = mock.Mock(api_version=version)
+        manager = shares.ShareManager(api=mock_microversion)
+
+        with mock.patch.object(manager, "_action",
+                               mock.Mock(return_value="fake")):
+            result = manager.migration_cancel(share)
+
+            manager._action.assert_called_once_with(
+                "migration_cancel", share)
             self.assertEqual("fake", result)
