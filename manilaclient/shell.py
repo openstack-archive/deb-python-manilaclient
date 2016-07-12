@@ -55,10 +55,21 @@ class AllowOnlyOneAliasAtATimeAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         # NOTE(vponomaryov): this method is redefinition of
         # argparse.Action.__call__ interface
-        if getattr(namespace, self.dest) is not None:
+
+        if not hasattr(self, 'calls'):
+            self.calls = {}
+
+        if self.dest not in self.calls:
+            self.calls[self.dest] = set()
+
+        local_values = sorted(values) if isinstance(values, list) else values
+        self.calls[self.dest].add(six.text_type(local_values))
+
+        if len(self.calls[self.dest]) == 1:
+            setattr(namespace, self.dest, local_values)
+        else:
             msg = "Only one alias is allowed at a time."
             raise argparse.ArgumentError(self, msg)
-        setattr(namespace, self.dest, values)
 
 
 class ManilaClientArgumentParser(argparse.ArgumentParser):
@@ -248,6 +259,22 @@ class OpenStackManilaShell(object):
         parser.add_argument('--os_region_name',
                             help=argparse.SUPPRESS)
 
+        parser.add_argument('--os-token',
+                            metavar='<token>',
+                            default=cliutils.env('OS_TOKEN'),
+                            help='Defaults to env[OS_TOKEN].')
+        parser.add_argument('--os_token',
+                            help=argparse.SUPPRESS)
+
+        parser.add_argument('--bypass-url',
+                            metavar='<bypass-url>',
+                            default=cliutils.env('MANILACLIENT_BYPASS_URL'),
+                            help=("Use this API endpoint instead of the "
+                                  "Service Catalog. Defaults to "
+                                  "env[MANILACLIENT_BYPASS_URL]."))
+        parser.add_argument('--bypass_url',
+                            help=argparse.SUPPRESS)
+
         parser.add_argument('--service-type',
                             metavar='<service-type>',
                             help='Defaults to compute for most actions.')
@@ -414,11 +441,11 @@ class OpenStackManilaShell(object):
         if not debug:
             return
 
-        streamhandler = logging.StreamHandler()
         streamformat = "%(levelname)s (%(module)s:%(lineno)d) %(message)s"
-        streamhandler.setFormatter(logging.Formatter(streamformat))
-        logger.setLevel(logging.DEBUG)
-        logger.addHandler(streamhandler)
+        logging.basicConfig(level=logging.DEBUG, format=streamformat)
+        logging.getLogger('requests.packages.urllib3.connectionpool'
+                          ).setLevel(logging.WARNING)
+        logging.getLogger('keystoneclient.session').setLevel(logging.WARNING)
 
     def _build_subcommands_and_extensions(self,
                                           os_api_version,
@@ -489,17 +516,19 @@ class OpenStackManilaShell(object):
             project_domain_id=args.os_project_domain_id,
             project_domain_name=args.os_project_domain_name,
             cert=args.os_cert,
+            input_auth_token=args.os_token,
+            service_catalog_url=args.bypass_url,
         )
 
         # Handle deprecated parameters
         if args.share_service_name:
             client_args['share_service_name'] = args.share_service_name
 
-        self._validate_required_options(args.os_tenant_name,
-                                        args.os_tenant_id,
-                                        args.os_project_name,
-                                        args.os_project_id,
-                                        client_args['auth_url'])
+        self._validate_required_options(
+            args.os_tenant_name, args.os_tenant_id,
+            args.os_project_name, args.os_project_id,
+            args.os_token, args.bypass_url,
+            client_args['auth_url'])
 
         # This client is needed to discover the server api version.
         temp_client = client.Client(manilaclient.API_MAX_VERSION,
@@ -564,15 +593,12 @@ class OpenStackManilaShell(object):
                 options.os_share_api_version)
         return api_version
 
-    def _validate_required_options(self,
-                                   os_tenant_name,
-                                   os_tenant_id,
-                                   os_project_name,
-                                   os_project_id,
-                                   os_auth_url):
-
-        if not (os_tenant_name or os_tenant_id or os_project_name or
-                os_project_id):
+    def _validate_required_options(self, tenant_name, tenant_id,
+                                   project_name, project_id,
+                                   token, service_catalog_url, auth_url):
+        if token and service_catalog_url:
+            return
+        if not (tenant_name or tenant_id or project_name or project_id):
             raise exc.CommandError(
                 "You must provide a tenant_name, tenant_id, "
                 "project_id or project_name (with "
@@ -585,7 +611,7 @@ class OpenStackManilaShell(object):
                 "--os-project-domain-name (env[OS_PROJECT_DOMAIN_NAME])."
             )
 
-        if not os_auth_url:
+        if not auth_url:
             raise exc.CommandError(
                 "You must provide an auth url "
                 "via either --os-auth-url or env[OS_AUTH_URL]")
