@@ -7,7 +7,7 @@ Uploaders: Thomas Goirand <zigo@debian.org>,
            Corey Bryant <corey.bryant@canonical.com>,
 Build-Depends: debhelper (>= 9),
                dh-python,
-               openstack-pkg-tools,
+               openstack-pkg-tools (>= 52~),
                python-all,
                python-pbr (>= 1.8),
                python-setuptools,
@@ -76,6 +76,7 @@ Depends: python-babel (>= 2.3.4),
          python-six (>= 1.9.0),
          ${misc:Depends},
          ${python:Depends},
+Recommends: python-manilaclient-doc,
 Description: OpenStack shared file system as a service - Python 2.7 client
  Manila is an OpenStack project to provide Shared Filesystems as a service.
  It provides coordinated access to shared or distributed file systems. While
@@ -104,6 +105,7 @@ Depends: python3-babel (>= 2.3.4),
          python3-six (>= 1.9.0),
          ${misc:Depends},
          ${python3:Depends},
+Recommends: python-manilaclient-doc,
 Description: OpenStack shared file system as a service - Python 3.x client
  Manila is an OpenStack project to provide Shared Filesystems as a service.
  It provides coordinated access to shared or distributed file systems. While

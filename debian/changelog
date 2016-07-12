@@ -6,6 +6,7 @@ python-manilaclient (1.9.0-1) experimental; urgency=medium
   [ Thomas Goirand ]
   * New upstream release.
   * Fixed (build-)depends for this release.
+  * Using pkgos-dh_auto_{test,install} from openstack-pkg-tools >= 52~.
 
  -- Thomas Goirand <zigo@debian.org>  Tue, 12 Jul 2016 21:03:34 +0200
 
