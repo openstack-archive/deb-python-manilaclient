@@ -1,8 +1,12 @@
-python-manilaclient (1.8.1-3) UNRELEASED; urgency=medium
+python-manilaclient (1.9.0-1) experimental; urgency=medium
 
+  [ Ondřej Nový ]
   * Standards-Version is 3.9.8 now (no change)
 
- -- Ondřej Nový <novy@ondrej.org>  Sat, 09 Apr 2016 19:27:52 +0200
+  [ Thomas Goirand ]
+  * New upstream release.
+
+ -- Thomas Goirand <zigo@debian.org>  Tue, 12 Jul 2016 21:03:34 +0200
 
 python-manilaclient (1.8.1-2) unstable; urgency=medium
 
