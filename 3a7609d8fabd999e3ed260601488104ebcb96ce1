@@ -1,0 +1,10 @@
+Code-Review+2: Valeriy Ponomaryov <vponomaryov@mirantis.com>
+Code-Review+1: Goutham Pacha Ravi <gouthamr@netapp.com>
+Code-Review+2: Mark Sturdevant <mark.sturdevant@hpe.com>
+Workflow+1: Mark Sturdevant <mark.sturdevant@hpe.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 24 Jun 2016 17:39:33 +0000
+Reviewed-on: https://review.openstack.org/312017
+Project: openstack/deb-python-manilaclient
+Branch: refs/heads/master

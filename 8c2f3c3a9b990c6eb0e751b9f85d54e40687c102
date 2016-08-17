@@ -1,0 +1,9 @@
+Code-Review+2: Clinton Knight <cknight@netapp.com>
+Code-Review+2: xing-yang <xing.yang@emc.com>
+Workflow+1: xing-yang <xing.yang@emc.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 13 Jul 2016 21:54:22 +0000
+Reviewed-on: https://review.openstack.org/341630
+Project: openstack/deb-python-manilaclient
+Branch: refs/heads/master

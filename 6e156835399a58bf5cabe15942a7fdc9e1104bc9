@@ -1,0 +1,10 @@
+Code-Review+2: Rodrigo Barbieri <rodrigo.barbieri2010@gmail.com>
+Code-Review+1: Goutham Pacha Ravi <gouthamr@netapp.com>
+Code-Review+2: Clinton Knight <cknight@netapp.com>
+Workflow+1: Clinton Knight <cknight@netapp.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 24 Jun 2016 15:46:08 +0000
+Reviewed-on: https://review.openstack.org/333229
+Project: openstack/deb-python-manilaclient
+Branch: refs/heads/master
