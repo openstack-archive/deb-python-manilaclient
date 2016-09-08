@@ -1,4 +1,5 @@
 [gerrit]
 host=review.openstack.org
 port=29418
-project=openstack/python-manilaclient.git
+project=openstack/deb-python-manilaclient.git
+defaultbranch=debian/newton
