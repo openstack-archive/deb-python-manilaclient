@@ -1,0 +1,9 @@
+Code-Review+2: Valeriy Ponomaryov <vponomaryov@mirantis.com>
+Code-Review+2: xing-yang <xing.yang@emc.com>
+Workflow+1: xing-yang <xing.yang@emc.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 17 Dec 2015 04:26:53 +0000
+Reviewed-on: https://review.openstack.org/258333
+Project: openstack/deb-python-manilaclient
+Branch: refs/heads/stable/liberty

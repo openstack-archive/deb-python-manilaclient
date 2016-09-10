@@ -1,0 +1,10 @@
+Code-Review+2: Mark Sturdevant <mark.sturdevant@hpe.com>
+Code-Review+2: Clinton Knight <cknight@netapp.com>
+Code-Review+2: xing-yang <xing.yang@emc.com>
+Workflow+1: Clinton Knight <cknight@netapp.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Sun, 08 Nov 2015 04:37:11 +0000
+Reviewed-on: https://review.openstack.org/239526
+Project: openstack/deb-python-manilaclient
+Branch: refs/heads/stable/liberty

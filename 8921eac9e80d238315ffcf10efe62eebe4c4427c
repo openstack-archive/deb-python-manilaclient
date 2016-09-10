@@ -1,0 +1,10 @@
+Code-Review+2: Thomas Bechtold <tbechtold@suse.com>
+Code-Review+1: Clint Adams <clint@gcfm.net>
+Code-Review+2: xing-yang <xing.yang@emc.com>
+Workflow+1: xing-yang <xing.yang@emc.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Sun, 08 Nov 2015 23:43:13 +0000
+Reviewed-on: https://review.openstack.org/234096
+Project: openstack/deb-python-manilaclient
+Branch: refs/heads/stable/liberty
