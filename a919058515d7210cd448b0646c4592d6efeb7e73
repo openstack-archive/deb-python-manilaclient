@@ -1,0 +1,9 @@
+Code-Review+2: Mark Sturdevant <mark.sturdevant@hpe.com>
+Code-Review+2: Clinton Knight <cknight@netapp.com>
+Workflow+1: Clinton Knight <cknight@netapp.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 28 Jun 2016 13:37:37 +0000
+Reviewed-on: https://review.openstack.org/333976
+Project: openstack/deb-python-manilaclient
+Branch: refs/heads/stable/mitaka
