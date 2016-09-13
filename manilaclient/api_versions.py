@@ -27,7 +27,7 @@ from manilaclient import utils
 
 LOG = logging.getLogger(__name__)
 
-MAX_VERSION = '2.15'
+MAX_VERSION = '2.22'
 MIN_VERSION = '2.0'
 DEPRECATED_VERSION = '1.0'
 _VERSIONED_METHOD_MAP = {}
@@ -49,7 +49,7 @@ class APIVersion(object):
         self.ver_minor = 0
 
         if version_str is not None:
-            match = re.match(r"^([1-9]\d*)\.([1-9]\d*|0|)$", version_str)
+            match = re.match(r"^([1-9]\d*)\.([1-9]\d*|0)$", version_str)
             if match:
                 self.ver_major = int(match.group(1))
                 self.ver_minor = int(match.group(2))
@@ -353,7 +353,8 @@ def experimental_api(f):
     @functools.wraps(f)
     def _wrapper(*args, **kwargs):
         client = args[0]
-        if isinstance(client, manilaclient.v2.client.Client):
+        if (isinstance(client, manilaclient.v2.client.Client) or
+                hasattr(client, 'client')):
             dh = client.client.default_headers
             dh[constants.EXPERIMENTAL_HTTP_HEADER] = 'true'
         return f(*args, **kwargs)

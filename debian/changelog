@@ -1,3 +1,14 @@
+python-manilaclient (1.11.0-1) experimental; urgency=medium
+
+  [ Corey Bryant ]
+  * New upstream release.
+  * Align (Build-)Depends with upstream.
+
+  [ Thomas Goirand ]
+  * Using OpenStack's Gerrit as VCS URLs.
+
+ -- Thomas Goirand <zigo@debian.org>  Tue, 13 Sep 2016 18:42:39 +0200
+
 python-manilaclient (1.9.0-1) experimental; urgency=medium
 
   [ Ondřej Nový ]

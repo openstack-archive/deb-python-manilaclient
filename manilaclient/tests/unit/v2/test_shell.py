@@ -1,4 +1,4 @@
-# Copyright 2013 OpenStack LLC.
+# Copyright 2013 OpenStack Foundation
 # Copyright 2014 Mirantis, Inc.
 # All Rights Reserved.
 #
@@ -40,7 +40,6 @@ class ShellTest(test_utils.TestCase):
         'MANILA_USERNAME': 'username',
         'MANILA_PASSWORD': 'password',
         'MANILA_PROJECT_ID': 'project_id',
-        'OS_SHARE_API_VERSION': '2.5',
         'MANILA_URL': 'http://no.where',
     }
 
@@ -147,9 +146,30 @@ class ShellTest(test_utils.TestCase):
             self.run_command('list --name' + separator + '1234')
             self.assert_called('GET', '/shares/detail?name=1234')
 
+    @mock.patch.object(cliutils, 'print_list', mock.Mock())
     def test_list_all_tenants_only_key(self):
         self.run_command('list --all-tenants')
         self.assert_called('GET', '/shares/detail?all_tenants=1')
+        cliutils.print_list.assert_called_once_with(
+            mock.ANY,
+            ['ID', 'Name', 'Size', 'Share Proto', 'Status', 'Is Public',
+             'Share Type Name', 'Host', 'Availability Zone', 'Project ID'])
+
+    @mock.patch.object(cliutils, 'print_list', mock.Mock())
+    def test_list_select_column_and_all_tenants(self):
+        self.run_command('list --columns ID,Name --all-tenants')
+        self.assert_called('GET', '/shares/detail?all_tenants=1')
+        cliutils.print_list.assert_called_once_with(
+            mock.ANY,
+            ['Id', 'Name'])
+
+    @mock.patch.object(cliutils, 'print_list', mock.Mock())
+    def test_list_select_column_and_public(self):
+        self.run_command('list --columns ID,Name --public')
+        self.assert_called('GET', '/shares/detail?is_public=True')
+        cliutils.print_list.assert_called_once_with(
+            mock.ANY,
+            ['Id', 'Name'])
 
     def test_list_all_tenants_key_and_value_1(self):
         for separator in self.separators:
@@ -309,7 +329,7 @@ class ShellTest(test_utils.TestCase):
         cliutils.print_list.assert_called_once_with(
             mock.ANY,
             ['ID', 'Share ID', 'Host', 'Status', 'Availability Zone',
-             'Share Network ID', 'Share Server ID'])
+             'Share Network ID', 'Share Server ID', 'Share Type ID'])
 
     @mock.patch.object(cliutils, 'print_list', mock.Mock())
     def test_share_instance_list_select_column(self):
@@ -452,7 +472,8 @@ class ShellTest(test_utils.TestCase):
             'Is Public',
             'Share Type Name',
             'Host',
-            'Availability Zone'
+            'Availability Zone',
+            'Project ID'
         ]
         self.run_command('list --public')
         self.assert_called('GET', '/shares/detail?is_public=True')
@@ -609,9 +630,13 @@ class ShellTest(test_utils.TestCase):
             mock.ANY,
             ['Id', 'Name'])
 
+    @mock.patch.object(cliutils, 'print_list', mock.Mock())
     def test_list_snapshots_all_tenants_only_key(self):
         self.run_command('snapshot-list --all-tenants')
         self.assert_called('GET', '/snapshots/detail?all_tenants=1')
+        cliutils.print_list.assert_called_once_with(
+            mock.ANY,
+            ['ID', 'Share ID', 'Status', 'Name', 'Share Size', 'Project ID'])
 
     def test_list_snapshots_all_tenants_key_and_value_1(self):
         for separator in self.separators:
@@ -1337,7 +1362,8 @@ class ShellTest(test_utils.TestCase):
         self.run_command("access-list 1111")
         cliutils.print_list.assert_called_with(
             mock.ANY,
-            ['id', 'access_type', 'access_to', 'access_level', 'state'])
+            ['id', 'access_type', 'access_to', 'access_level', 'state',
+             'access_key'])
 
     @mock.patch.object(cliutils, 'print_list', mock.Mock())
     def test_access_list_select_column(self):
@@ -1740,6 +1766,15 @@ class ShellTest(test_utils.TestCase):
         self.assert_called(
             'GET', '/share-replicas/detail?share_id=fake-share-id')
 
+    @mock.patch.object(cliutils, 'print_list', mock.Mock())
+    def test_share_replica_list_select_column(self):
+        self.run_command('share-replica-list --columns id,status')
+
+        self.assert_called('GET', '/share-replicas/detail')
+
+        cliutils.print_list.assert_called_once_with(
+            mock.ANY, ['Id', 'Status'])
+
     @ddt.data(
         'fake-share-id --az fake-az',
         'fake-share-id --availability-zone fake-az --share-network '
@@ -1800,3 +1835,72 @@ class ShellTest(test_utils.TestCase):
         self.assert_called(
             'POST', '/share-replicas/1234/action',
             body={action_name: {attr: 'xyzzyspoon!'}})
+
+    def test_snapshot_instance_list_all(self):
+        self.run_command('snapshot-instance-list')
+        self.assert_called('GET', '/snapshot-instances')
+
+    def test_snapshot_instance_list_all_detail(self):
+        self.run_command('snapshot-instance-list --detail True')
+        self.assert_called('GET', '/snapshot-instances/detail')
+
+    @mock.patch.object(cliutils, 'print_list', mock.Mock())
+    def test_snapshot_instance_list_select_column(self):
+        self.run_command('snapshot-instance-list --columns id,status')
+        self.assert_called('GET', '/snapshot-instances')
+        cliutils.print_list.assert_called_once_with(
+            mock.ANY, ['Id', 'Status'])
+
+    @mock.patch.object(shell_v2, '_find_share_snapshot', mock.Mock())
+    def test_snapshot_instance_list_for_snapshot(self):
+        fsnapshot = type('FakeSansphot', (object,),
+                         {'id': 'fake-snapshot-id'})
+        shell_v2._find_share_snapshot.return_value = fsnapshot
+        cmd = 'snapshot-instance-list --snapshot %s'
+        self.run_command(cmd % fsnapshot.id)
+
+        self.assert_called(
+            'GET', '/snapshot-instances?snapshot_id=fake-snapshot-id')
+
+    def test_snapshot_instance_show(self):
+        self.run_command('snapshot-instance-show 1234')
+        self.assert_called('GET', '/snapshot-instances/1234')
+
+    def test_snapshot_instance_reset_state(self):
+        self.run_command('snapshot-instance-reset-state 1234')
+        expected = {'reset_status': {'status': 'available'}}
+        self.assert_called('POST', '/snapshot-instances/1234/action',
+                           body=expected)
+
+    def test_migration_start(self):
+        command = ("migration-start --preserve-metadata False --writable False"
+                   " --force-host-assisted-migration True "
+                   "--non-disruptive True --new-share-network 1111 "
+                   "--new-share-type 1 1234 host@backend#pool")
+        self.run_command(command)
+        expected = {'migration_start': {
+            'host': 'host@backend#pool',
+            'force_host_assisted_migration': 'True',
+            'preserve-metadata': 'False',
+            'writable': 'False',
+            'nondisruptive': 'True',
+            'new_share_network_id': '1111',
+            'new_share_type_id': '1'
+        }}
+        self.assert_called('POST', '/shares/1234/action', body=expected)
+
+    @ddt.data('migration-complete', 'migration-get-progress',
+              'migration-cancel')
+    def test_migration_others(self, method):
+        command = ' '.join((method, '1234'))
+        self.run_command(command)
+        expected = {method.replace('-', '_'): None}
+        self.assert_called('POST', '/shares/1234/action', body=expected)
+
+    @ddt.data('migration_error', 'migration_success', None)
+    def test_reset_task_state(self, param):
+        command = ' '.join(('reset-task-state --state', six.text_type(param),
+                            '1234'))
+        self.run_command(command)
+        expected = {'reset_task_state': {'task_state': param}}
+        self.assert_called('POST', '/shares/1234/action', body=expected)

@@ -43,9 +43,15 @@ class Share(common_base.Resource):
         """Unmanage this share."""
         self.manager.unmanage(self, **kwargs)
 
-    def migration_start(self, host, force_host_copy, notify=True):
+    def migration_start(self, host, force_host_assisted_migration,
+                        preserve_metadata=True, writable=True,
+                        nondisruptive=False, new_share_network_id=None,
+                        new_share_type_id=None):
         """Migrate the share to a new host."""
-        self.manager.migration_start(self, host, force_host_copy, notify)
+        self.manager.migration_start(self, host, force_host_assisted_migration,
+                                     preserve_metadata, writable,
+                                     nondisruptive, new_share_network_id,
+                                     new_share_type_id)
 
     def migration_complete(self):
         """Complete migration of a share."""
@@ -144,39 +150,25 @@ class ShareManager(base.ManagerWithFind):
         }
         return self._create('/shares', {'share': body}, 'share')
 
-    def _do_migrate_start(self, share, host, force_host_copy, notify,
-                          action_name):
-        """Migrate share to new host and pool.
-
-        :param share: The :class:'share' to migrate
-        :param host: The destination host and pool
-        :param force_host_copy: Skip driver optimizations
-        :param notify: whether migration completion should be notified
-        :param action_name: action name to be used in request. Changes
-            according to desired microversion.
-        """
-
+    @api_versions.wraps("2.22")
+    @api_versions.experimental_api
+    def migration_start(self, share, host, force_host_assisted_migration,
+                        preserve_metadata=True, writable=True,
+                        nondisruptive=False, new_share_network_id=None,
+                        new_share_type_id=None):
         return self._action(
-            action_name, share,
-            {"host": host, "force_host_copy": force_host_copy,
-             "notify": notify})
+            "migration_start", share, {
+                "host": host,
+                "force_host_assisted_migration": force_host_assisted_migration,
+                "preserve_metadata": preserve_metadata,
+                "writable": writable,
+                "nondisruptive": nondisruptive,
+                "new_share_network_id": new_share_network_id,
+                "new_share_type_id": new_share_type_id,
+            })
 
-    @api_versions.wraps("2.5", "2.6")
-    def migration_start(self, share, host, force_host_copy):
-        return self._do_migrate_start(
-            share, host, force_host_copy, True, "os-migrate_share")
-
-    @api_versions.wraps("2.7", "2.14")  # noqa
-    def migration_start(self, share, host, force_host_copy):
-        return self._do_migrate_start(
-            share, host, force_host_copy, True, "migrate_share")
-
-    @api_versions.wraps("2.15")  # noqa
-    def migration_start(self, share, host, force_host_copy, notify):
-        return self._do_migrate_start(
-            share, host, force_host_copy, notify, "migration_start")
-
-    @api_versions.wraps("2.15")
+    @api_versions.wraps("2.22")
+    @api_versions.experimental_api
     def reset_task_state(self, share, task_state):
         """Update the provided share with the provided task state.
 
@@ -186,7 +178,8 @@ class ShareManager(base.ManagerWithFind):
         return self._action('reset_task_state', share,
                             {"task_state": task_state})
 
-    @api_versions.wraps("2.15")
+    @api_versions.wraps("2.22")
+    @api_versions.experimental_api
     def migration_complete(self, share):
         """Completes migration for a given share.
 
@@ -194,7 +187,8 @@ class ShareManager(base.ManagerWithFind):
         """
         return self._action('migration_complete', share)
 
-    @api_versions.wraps("2.15")
+    @api_versions.wraps("2.22")
+    @api_versions.experimental_api
     def migration_cancel(self, share):
         """Attempts to cancel migration for a given share.
 
@@ -202,7 +196,8 @@ class ShareManager(base.ManagerWithFind):
         """
         return self._action('migration_cancel', share)
 
-    @api_versions.wraps("2.15")
+    @api_versions.wraps("2.22")
+    @api_versions.experimental_api
     def migration_get_progress(self, share):
         """Obtains progress of share migration for a given share.
 

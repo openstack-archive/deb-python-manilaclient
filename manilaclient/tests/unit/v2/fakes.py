@@ -1,5 +1,5 @@
 # Copyright (c) 2011 X.commerce, a business unit of eBay Inc.
-# Copyright 2011 OpenStack, LLC
+# Copyright 2011 OpenStack Foundation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,13 +23,18 @@ from manilaclient.v2 import client
 class FakeClient(fakes.FakeClient):
 
     def __init__(self, *args, **kwargs):
-        client.Client.__init__(self, manilaclient.API_MAX_VERSION,
-                               'username', 'password',
-                               'project_id', 'auth_url',
-                               input_auth_token='token',
-                               extensions=kwargs.get('extensions'),
-                               service_catalog_url='http://localhost:8786',
-                               api_version=manilaclient.API_MAX_VERSION)
+        client.Client.__init__(
+            self,
+            manilaclient.API_MAX_VERSION,
+            'username',
+            'password',
+            'project_id',
+            'auth_url',
+            input_auth_token='token',
+            extensions=kwargs.get('extensions'),
+            service_catalog_url='http://localhost:8786',
+            api_version=kwargs.get("api_version", manilaclient.API_MAX_VERSION)
+        )
         self.client = FakeHTTPClient(**kwargs)
 
 fake_share_instance = {
@@ -73,7 +78,8 @@ class FakeHTTPClient(fakes.FakeHTTPClient):
                         }
                     ],
                     "min_version": "2.0",
-                    "version": "2.8",
+                    "version": self.default_headers[
+                        "X-Openstack-Manila-Api-Version"],
                     "id": "v2.0",
                 }
             ]
@@ -361,6 +367,19 @@ class FakeHTTPClient(fakes.FakeHTTPClient):
             assert body[action]['new_size'] is not None
         elif action in ('unmanage', ):
             assert body[action] is None
+        elif action in (
+                'migration_cancel', 'migration_complete',
+                'migration_get_progress'):
+            assert body[action] is None
+            if 'migration_get_progress' == action:
+                _body = {'total_progress': 50}
+                return 200, {}, _body
+        elif action in (
+                'os-migrate_share', 'migrate_share',
+                'migration_start'):
+            assert 'host' in body[action]
+        elif action == 'reset_task_state':
+            assert 'task_state' in body[action]
         else:
             raise AssertionError("Unexpected share action: %s" % action)
         return (resp, {}, _body)
@@ -748,6 +767,53 @@ class FakeHTTPClient(fakes.FakeHTTPClient):
         ]})
 
     get_types_3_share_type_access = get_types_3_os_share_type_access
+
+    fake_snapshot_instance = {
+        "id": "1234",
+        "snapshot_id": "5678",
+        "status": "error",
+    }
+
+    def get_snapshot_instances(self, **kw):
+        instances = {
+            'snapshot_instances': [
+                self.fake_snapshot_instance,
+            ]
+        }
+        return (200, {}, instances)
+
+    def get_snapshot_instances_detail(self, **kw):
+        instances = {
+            'snapshot_instances': [
+                {
+                    'id': '1234',
+                    'snapshot_id': '5679',
+                    'created_at': 'fake',
+                    'updated_at': 'fake',
+                    'status': 'fake',
+                    'share_id': 'fake',
+                    'share_instance_id': 'fake',
+                    'progress': 'fake',
+                    'provider_location': 'fake',
+                }
+            ]
+        }
+        return (200, {}, instances)
+
+    def get_snapshot_instances_1234(self, **kw):
+        instances = {'snapshot_instance': self.fake_snapshot_instance}
+        return (200, {}, instances)
+
+    def post_snapshot_instances_1234_action(self, body, **kw):
+        _body = None
+        resp = 202
+        assert len(list(body)) == 1
+        action = list(body)[0]
+        if action == 'reset_status':
+            assert 'status' in body.get(action)
+        else:
+            raise AssertionError("Unexpected share action: %s" % action)
+        return (resp, {}, _body)
 
 
 def fake_create(url, body, response_key):

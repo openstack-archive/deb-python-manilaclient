@@ -1,6 +1,6 @@
 # Copyright 2010 Jacob Kaplan-Moss
 
-# Copyright 2011 OpenStack LLC.
+# Copyright 2011 OpenStack Foundation
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -521,40 +521,32 @@ class SharesTest(utils.TestCase):
         cs.shares.list_instances(share)
         cs.assert_called('GET', '/shares/1234/instances')
 
-    @ddt.data(
-        ("2.6", "os-migrate_share"),
-        ("2.7", "migrate_share"),
-        ("2.14", "migrate_share"),
-        ("2.15", "migration_start"),
-    )
-    @ddt.unpack
-    def test_migration_start(self, microversion, action_name):
+    def test_migration_start(self):
         share = "fake_share"
         host = "fake_host"
-        force_host_copy = "fake_force_host_copy"
-        version = api_versions.APIVersion(microversion)
-        mock_microversion = mock.Mock(api_version=version)
-        manager = shares.ShareManager(api=mock_microversion)
+        version = api_versions.APIVersion('2.22')
+        manager = shares.ShareManager(
+            api=fakes.FakeClient(api_version=version))
 
         with mock.patch.object(manager, "_action",
                                mock.Mock(return_value="fake")):
-            if version < api_versions.APIVersion('2.15'):
-                result = manager.migration_start(share, host, force_host_copy)
-            else:
-                result = manager.migration_start(share, host, force_host_copy,
-                                                 True)
-
+            result = manager.migration_start(share, host, True)
             manager._action.assert_called_once_with(
-                action_name, share,
-                {"host": host, "force_host_copy": force_host_copy,
-                 "notify": True})
+                'migration_start', share, {
+                    "host": host,
+                    "force_host_assisted_migration": True,
+                    "preserve_metadata": True,
+                    "writable": True,
+                    "nondisruptive": False,
+                    "new_share_network_id": None,
+                    "new_share_type_id": None,
+                })
+
             self.assertEqual("fake", result)
 
     def test_migration_complete(self):
         share = "fake_share"
-        version = api_versions.APIVersion("2.15")
-        mock_microversion = mock.Mock(api_version=version)
-        manager = shares.ShareManager(api=mock_microversion)
+        manager = shares.ShareManager(api=fakes.FakeClient())
 
         with mock.patch.object(manager, "_action",
                                mock.Mock(return_value="fake")):
@@ -566,9 +558,7 @@ class SharesTest(utils.TestCase):
 
     def test_migration_get_progress(self):
         share = "fake_share"
-        version = api_versions.APIVersion("2.15")
-        mock_microversion = mock.Mock(api_version=version)
-        manager = shares.ShareManager(api=mock_microversion)
+        manager = shares.ShareManager(api=fakes.FakeClient())
 
         with mock.patch.object(manager, "_action",
                                mock.Mock(return_value="fake")):
@@ -581,9 +571,7 @@ class SharesTest(utils.TestCase):
     def test_reset_task_state(self):
         share = "fake_share"
         state = "fake_state"
-        version = api_versions.APIVersion("2.15")
-        mock_microversion = mock.Mock(api_version=version)
-        manager = shares.ShareManager(api=mock_microversion)
+        manager = shares.ShareManager(api=fakes.FakeClient())
 
         with mock.patch.object(manager, "_action",
                                mock.Mock(return_value="fake")):
@@ -595,9 +583,7 @@ class SharesTest(utils.TestCase):
 
     def test_migration_cancel(self):
         share = "fake_share"
-        version = api_versions.APIVersion("2.15")
-        mock_microversion = mock.Mock(api_version=version)
-        manager = shares.ShareManager(api=mock_microversion)
+        manager = shares.ShareManager(api=fakes.FakeClient())
 
         with mock.patch.object(manager, "_action",
                                mock.Mock(return_value="fake")):

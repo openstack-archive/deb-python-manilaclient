@@ -1,6 +1,6 @@
 # Copyright 2010 Jacob Kaplan-Moss
 
-# Copyright 2011 OpenStack LLC.
+# Copyright 2011 OpenStack Foundation
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -46,6 +46,7 @@ class Manager(utils.HookableMixin):
 
     def __init__(self, api):
         self.api = api
+        self.client = api.client
 
     @property
     def api_version(self):
