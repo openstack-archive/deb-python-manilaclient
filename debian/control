@@ -57,8 +57,8 @@ Build-Depends-Indep: python-babel (>= 2.3.4),
                      tempest (>= 1:12.1.0),
                      testrepository,
 Standards-Version: 3.9.8
-Vcs-Git: https://git.openstack.org/openstack/deb-python-manilaclient
-Vcs-Browser: https://git.openstack.org/cgit/openstack/deb-python-manilaclient
+Vcs-Git: https://git.openstack.org/openstack/deb-python-manilaclient -b debian/newton
+Vcs-Browser: https://git.openstack.org/cgit/openstack/deb-python-manilaclient?h=debian%2Fnewton
 Homepage: https://github.com/openstack/python-manilaclient
 
 Package: python-manilaclient
