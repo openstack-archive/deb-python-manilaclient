@@ -1,0 +1,9 @@
+Code-Review+2: Mark Sturdevant <mark.sturdevant@hpe.com>
+Code-Review+2: Tom Barron <tpb@dyncloud.net>
+Workflow+1: Tom Barron <tpb@dyncloud.net>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 06 Oct 2016 17:47:47 +0000
+Reviewed-on: https://review.openstack.org/382519
+Project: openstack/deb-python-manilaclient
+Branch: refs/heads/master
