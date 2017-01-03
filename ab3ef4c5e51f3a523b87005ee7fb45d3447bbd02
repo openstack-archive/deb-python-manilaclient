@@ -1,0 +1,10 @@
+Code-Review+2: Goutham Pacha Ravi <gouthampravi@gmail.com>
+Code-Review+2: Tom Barron <tpb@dyncloud.net>
+Code-Review+2: xing-yang <xing.yang@emc.com>
+Workflow+1: xing-yang <xing.yang@emc.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 28 Dec 2016 20:51:02 +0000
+Reviewed-on: https://review.openstack.org/415138
+Project: openstack/deb-python-manilaclient
+Branch: refs/heads/master
