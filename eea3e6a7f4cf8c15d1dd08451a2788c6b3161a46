@@ -1,0 +1,10 @@
+Code-Review+2: Valeriy Ponomaryov <vponomaryov@mirantis.com>
+Code-Review+2: Goutham Pacha Ravi <gouthampravi@gmail.com>
+Code-Review+2: Mark Sturdevant <mark.sturdevant@ibm.com>
+Workflow+1: Mark Sturdevant <mark.sturdevant@ibm.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 10 Feb 2017 16:27:08 +0000
+Reviewed-on: https://review.openstack.org/425903
+Project: openstack/deb-python-manilaclient
+Branch: refs/heads/stable/ocata
