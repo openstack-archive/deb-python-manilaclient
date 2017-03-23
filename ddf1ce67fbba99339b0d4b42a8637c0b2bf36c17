@@ -1,0 +1,10 @@
+Code-Review+2: Rodrigo Barbieri <rodrigo.barbieri2010@gmail.com>
+Code-Review+2: Valeriy Ponomaryov <vponomaryov@mirantis.com>
+Code-Review+2: Mark Sturdevant <mark.sturdevant@ibm.com>
+Workflow+1: Mark Sturdevant <mark.sturdevant@ibm.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 15 Feb 2017 17:07:30 +0000
+Reviewed-on: https://review.openstack.org/425904
+Project: openstack/deb-python-manilaclient
+Branch: refs/heads/master
