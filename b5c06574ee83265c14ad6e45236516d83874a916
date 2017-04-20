@@ -1,0 +1,9 @@
+Code-Review+2: Tom Barron <tpb@dyncloud.net>
+Code-Review+2: Ben Swartzlander <ben@swartzlander.org>
+Workflow+1: Ben Swartzlander <ben@swartzlander.org>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 20 Apr 2017 15:56:16 +0000
+Reviewed-on: https://review.openstack.org/458453
+Project: openstack/deb-python-manilaclient
+Branch: refs/heads/master
