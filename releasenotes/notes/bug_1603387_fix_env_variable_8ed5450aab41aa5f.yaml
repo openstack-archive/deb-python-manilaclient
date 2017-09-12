@@ -1,5 +1,0 @@
----
-fixes:
-  - Use consistent environment variable naming. All old
-    variables are still supported due to compatibility reasons.
-

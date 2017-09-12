@@ -1,4 +1,0 @@
----
-features:
-  - Added ``--detail`` argument to pool list command.
-  - Added ``--share_type`` argument to pool list command.

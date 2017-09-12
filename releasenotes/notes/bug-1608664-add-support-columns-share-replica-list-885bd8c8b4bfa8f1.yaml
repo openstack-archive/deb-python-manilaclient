@@ -1,3 +1,0 @@
----
-fixes:
-  - Added "--columns" support for share-replica-list command.

@@ -1,3 +1,0 @@
----
-fixes:
-  - Added proper error handling for missing API minor version number.
